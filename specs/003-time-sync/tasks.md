@@ -224,7 +224,7 @@ and the `net` task skeleton.
   - a **secrets grep**: no `LOG*`/`Log::`/`r.line` call takes `wifipsk`/the PSK buffer/the setup code (inspect `NetService.cpp`, `SetupPortal.cpp`, `SettingsStore.cpp`);
   - the S0 `ad nav` and S1 PFD checks still pass.
 - [ ] T038 Run quickstart Q8 (24-h soak with serial logging: 24/24 syncs Ok, `wifi OFF` after each, a PSK grep of the log → 0) and complete `specs/003-time-sync/validation.md` with SC-001…SC-008
-- [ ] T039 After the PR is merged: update `docs/product_roadmap.md` per the **status tracking rule** (S2 → ✅ Done with date + PR number + pending manual checks; M1 status)
+- [X] T039 After the PR is merged: update `docs/product_roadmap.md` per the **status tracking rule** (S2 → ✅ Done with date + PR number + pending manual checks; M1 status)
 
 ---
 
