@@ -276,7 +276,7 @@ hysteresis; charging clears.
     gone);
   - the S1 regression script (PFD FPS, nav ring, IMU-fail caution now via AlertManager);
   - the S2/S3 boot sync + weather fetch still Ok.
-- [ ] T031 After the PR is merged, update `docs/product_roadmap.md` per the **status tracking rule**: S4 → ✅ Done with
+- [X] T031 After the PR is merged, update `docs/product_roadmap.md` per the **status tracking rule**: S4 → ✅ Done with
   the date, the PR number and the pending manual checks; M2 stays 🚧 (S5, S6 open).
 
 ---

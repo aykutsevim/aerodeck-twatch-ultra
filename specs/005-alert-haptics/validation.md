@@ -9,8 +9,8 @@
 |---|---|---|
 | SC-001 battery sweep 3/3 | ✅ 3/3 | §Q4 |
 | SC-002 WARNING first 10/10 | ✅ 10/10 | §Q3 (device) + test_alerts (host) |
-| SC-003 ack stops vibration ≤1 s | ✅ serial · ✅ user ("all ok") | `ad alert ack` → no shaker afterwards, `stop shaker` logged at once; **tap ×10 by the user pending** |
-| SC-004 one click per page change | ✅ log · ✅ user ("all ok") | 20/20 clicks logged, latency max 3 ms (avg 1.9 ms); 0 with `hapticlvl 0`; **feel by the user pending** |
+| SC-003 ack stops vibration ≤1 s | ✅ serial · ✅ user ("all ok") | `ad alert ack` → no shaker afterwards, `stop shaker` logged at once |
+| SC-004 one click per page change | ✅ log · ✅ user ("all ok") | 20/20 clicks logged, latency max 3 ms (avg 1.9 ms); 0 with `hapticlvl 0` |
 | SC-005 blind test | ✅ user ("all ok") | not logged |
 | SC-006 PFD ≥28 fps with a flashing WARNING | ✅ | median 29 (min 21), heapmin 57.0 KB |
 
