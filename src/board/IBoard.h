@@ -39,6 +39,9 @@ public:
     virtual bool configureAttitude(float rateHz, GravityCb cb, void* ctx) = 0;
     virtual bool readRtc(std::tm& utc, bool& integrity) = 0;   // RTC holds UTC
     virtual bool writeRtc(const std::tm& utc) = 0;
+    // S4: DRV2605 sequence (<= 7 entries: ROM effect ids, 0x80|n = wait n x 10 ms). False if haptics unavailable.
+    virtual bool haptic(const uint8_t* seq, uint8_t n) = 0;
+    virtual void hapticStop() = 0;
     virtual ~IBoard() = default;
 };
 

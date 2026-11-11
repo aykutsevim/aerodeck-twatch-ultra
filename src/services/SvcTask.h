@@ -4,7 +4,7 @@
 
 namespace SvcTask {
 using TickFn = void (*)(uint32_t nowMs);
-constexpr int kMaxTicks = 8;
+constexpr int kMaxTicks = 12;   // S4: 8 in use (alerts added); headroom for S5 audio
 constexpr uint32_t kPeriodMs = 50;
 bool addTick(TickFn fn);   // call before begin()
 void begin();

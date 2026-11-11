@@ -69,7 +69,15 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
   **REFRESH**. **STALE** means the report is more than 90 min old; NO WIFI / NET FAIL / NO REPORT / SRV ERROR say why
   the last fetch failed (the last good report stays). Change the station in Settings → Weather station (four letter
   wheels) or with `ad wx set LTFM`.
-- **Swipe left/right** to move through the page ring: PFD → Page A → Page B → Settings → PFD.
+- **Alerts (master annunciator):** every problem shows in one band at the top of every page: **WARNING** red,
+  **CAUTION** amber, **ADVISORY** cyan, with `+N` when more are active. It flashes until you **tap it** (tap =
+  acknowledge all: repeating vibration stops), then cycles through the active alerts every 3 s.
+- **Low battery:** below 15 % (not charging) → **STALL** warning with a stick-shaker vibration every 2 s until
+  acknowledged; at 5 % → **PULL UP**. Charging (or recovery past 17 % / 7 %) clears them.
+- **Vibration:** Settings → ALERTS → Vibration (Off / Low / High; warnings always vibrate) and **Quiet mode** (no
+  caution/advisory vibration, no sound from S5). Page changes and controls give a short click. **Test alert** raises
+  a 10 s CAUTION so you can feel it.
+- **Swipe left/right** to move through the page ring: PFD → WX → Page B → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
   restore defaults, and firmware/peripheral status.
@@ -99,6 +107,9 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad wx` · `ad wx fields` · `ad wx fetch` | Weather state, decoded fields, fetch now |
 | `ad wx set <ICAO>` | Weather station (4 letters) |
 | `ad wx decode "<METAR>" [show]` · `ad wx clear` · `ad wx age <s>` | Test hooks: decode text (optionally show it on the WX page), clear the cache, pretend the report is N s old |
+| `ad alert` · `ad alert raise <id> [W\|C\|A] ["text"]` · `ad alert clear <id>` · `ad alert ack` | List / raise / clear / acknowledge alerts (ids: `stall`, `pullup`, `test1..3`, …) |
+| `ad haptic <click\|advisory\|caution\|shaker\|stop>` | Play a vibration pattern (current strength / quiet rules) |
+| `ad fuel sim <pct\|off> [chg\|nochg]` | Test hook: simulate the battery level (and charging) |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
 | `ad att sweep <on\|off>` | Test hook: synthetic horizon motion for FPS measurement |
@@ -108,7 +119,8 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md) ·
 [S1 additions](specs/002-pfd-watch-face/contracts/serial_commands.md) ·
 [S2 additions](specs/003-time-sync/contracts/serial_commands.md) ·
-[S3 additions](specs/004-metar-weather/contracts/serial_commands.md).
+[S3 additions](specs/004-metar-weather/contracts/serial_commands.md) ·
+[S4 additions](specs/005-alert-haptics/contracts/serial_commands.md).
 
 ## Project layout
 

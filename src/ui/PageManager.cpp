@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "core/NavModel.h"
 #include "services/EventBus.h"
+#include "services/HapticService.h"
 #include "services/Log.h"
 #include "ui/DebugOverlay.h"
 #include "ui/PageIndicator.h"
@@ -51,6 +52,7 @@ static void onLoaded(lv_event_t*)
     LOGI("nav", "nav %s->%s %s %lu ms %lu frames %lu fps", s_pages[s_from]->title(), s_pages[cur]->title(),
          s_navKind, (unsigned long)dt, (unsigned long)frames, (unsigned long)(dt ? frames * 1000 / dt : 0));
     s_pages[cur]->onEnter();
+    HapticService::click();   // S4 FR-010: one click when the page has settled (swipe or button)
     EventBus::publish(EventType::PageChanged, uint32_t(s_pages[s_from]->id()), uint32_t(s_pages[cur]->id()));
     PageIndicator::show(cur, s_n, s_pages[cur]->title());
     if (cur == 0 && !s_firstHomeDone) {

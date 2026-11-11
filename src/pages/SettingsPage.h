@@ -17,6 +17,8 @@ private:
     lv_obj_t* logDd_ = nullptr;
     lv_obj_t* tzVal_ = nullptr;      // S2: zone name (button label)
     lv_obj_t* wxVal_ = nullptr;      // S3: weather station (button label)
+    lv_obj_t* vibDd_ = nullptr;      // S4: vibration off/low/high
+    lv_obj_t* quietSw_ = nullptr;    // S4: quiet mode
     lv_obj_t* netVal_ = nullptr;     // S2: network name
     lv_obj_t* netStatus_ = nullptr;  // S2: last result / busy
     lv_obj_t* lastSync_ = nullptr;   // S2: time since last successful sync

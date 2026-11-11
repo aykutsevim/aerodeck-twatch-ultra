@@ -13,7 +13,8 @@
 #include "services/AttitudeService.h"
 #include "services/BoardCommands.h"
 #include "services/NetService.h"
-#include "services/Cautions.h"
+#include "services/AlertManager.h"
+#include "services/HapticService.h"
 #include "services/EventBus.h"
 #include "services/Log.h"
 #include "services/PowerService.h"
@@ -22,7 +23,7 @@
 #include "services/SvcTask.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
-#include "ui/CautionBanner.h"
+#include "ui/AnnunciatorBar.h"
 #include "ui/DebugOverlay.h"
 #include "ui/NetSetupOverlay.h"
 #include "ui/PageManager.h"
@@ -94,6 +95,7 @@ static void cmdNav(int, const char* const* argv, Reply& r)
 static void onFirstHome()
 {
     LOGI("boot", "boot->home %lu ms", (unsigned long)(esp_timer_get_time() / 1000));
+    PowerService::enableBatteryAlarm();   // S4: STALL / PULL UP only once the face (and the band) is up
 }
 
 static void raisePeriphCautions()
@@ -101,9 +103,7 @@ static void raisePeriphCautions()
     for (uint8_t i = 0; i < uint8_t(Periph::Count); i++) {
         PeriphState s = board().periph(Periph(i));
         if (s == PeriphState::Failed || s == PeriphState::SimulatedFail) {
-            char t[25];
-            snprintf(t, sizeof t, "%s FAIL", periphName(Periph(i)));
-            Cautions::raise(CautionId(uint8_t(CautionId::PeriphFirst) + i), t);
+            AlertManager::raise(core::AlertId(uint8_t(core::AlertId::PeriphFirst) + i));   // "<NAME> FAIL"
         }
     }
 }
@@ -125,12 +125,12 @@ static void raiseBootCautions(const BootResult& br, SettingsStore::BootStatus st
 {
     raisePeriphCautions();   // Pending peripherals are reported after the deferred probe
     if (st == SettingsStore::BootStatus::ResetNewer) {
-        Cautions::raise(CautionId::SettingsReset, "SETTINGS RESET");
+        AlertManager::raise(core::AlertId::SettingsReset);
     } else if (st == SettingsStore::BootStatus::StorageError) {
-        Cautions::raise(CautionId::SettingsStorageError, "SETTINGS STORAGE ERROR");
+        AlertManager::raise(core::AlertId::SettingsStorageError);
     }
     if (mode == BootMode::Safe) {
-        Cautions::raise(CautionId::SafeMode, "SAFE MODE");
+        AlertManager::raise(core::AlertId::SafeMode);
     }
     (void)br;
 }
@@ -157,6 +157,9 @@ void setup()
     PowerService::registerCommands();
     SerialConsole::add("nav", 1, cmdNav);
     SvcTask::addTick(SettingsStore::tick);
+    AlertManager::begin();     // S4: before anything raises an alert (TimeService, boot cautions)
+    HapticService::begin();
+    SvcTask::addTick(AlertManager::tick);
 
 #ifdef AD_TEST_DISPLAY_CRASH
     // T047 verification only: simulate a crash during display init.
@@ -203,7 +206,7 @@ void setup()
     PageManager::registerPage(&g_settings);
     PageManager::onFirstHome(onFirstHome);
 
-    CautionBanner::begin();
+    AnnunciatorBar::begin();   // S4: replaces the S0 caution banner
     DebugOverlay::begin();
     NetSetupOverlay::begin();
     raiseBootCautions(br, st, mode);
@@ -253,14 +256,16 @@ void loop()
         case EventType::PeriphStatusChanged:
             g_settings.refresh();
             break;
-        case EventType::CautionChanged:
-            CautionBanner::refresh();
-            g_settings.refresh();
+        case EventType::AlertRaised:
+        case EventType::AlertCleared:
+        case EventType::AlertAcked:
+            AnnunciatorBar::update();
             break;
         default:
             break;
         }
     }
+    AnnunciatorBar::update();   // cheap seq check (alerts raised before the event queue existed)
     lv_timer_handler();
     delay(1);
 }

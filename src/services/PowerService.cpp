@@ -4,9 +4,10 @@
 #include <freertos/semphr.h>
 #include "board/IBoard.h"
 #include "services/EventBus.h"
-#include "services/Cautions.h"
+#include "services/AlertManager.h"
 #include "services/Log.h"
 #include "services/SerialConsole.h"
+#include "core/BatteryAlarm.h"
 #include "core/Fuel.h"
 #include <cmath>
 #include <cstdlib>
@@ -21,6 +22,9 @@ static uint32_t s_lastPollMs;
 static core::FuelFlow s_flow;
 static core::FuelState s_fuelState;
 static volatile int s_simPct = -1;   // `ad fuel sim` override, -1 = off
+static volatile int s_simChg = -1;   // S4: `ad fuel sim <pct> chg|nochg` charging override, -1 = off
+static core::BatteryAlarm s_battAlarm;   // S4: STALL / PULL UP (FR-012)
+static volatile bool s_alarmEnabled;     // S4: only after the watch face appears
 static uint32_t s_seq;
 
 static const char* railName(Rail r)
@@ -137,16 +141,33 @@ void tick(uint32_t nowMs)
     if (p.valid && s_simPct >= 0) {
         p.pmu.battPct = uint8_t(s_simPct);
     }
+    if (p.valid && s_simChg >= 0) {
+        p.pmu.charging = s_simChg != 0;
+    }
     p.fuelFlowPctPerH = NAN;
     if (p.valid) {
         s_flow.addSample(nowMs / 60000, p.pmu.battPct, p.pmu.charging);
         p.fuelFlowPctPerH = s_flow.ratePctPerH();
-        bool wasLow = s_fuelState.low();
-        p.lowFuel = s_fuelState.update(p.pmu.battPct, p.pmu.charging);
-        if (p.lowFuel && !wasLow) {
-            Cautions::raise(CautionId::LowFuel, "LOW FUEL");
-        } else if (!p.lowFuel && wasLow) {
-            Cautions::clear(CautionId::LowFuel);
+        p.lowFuel = s_fuelState.update(p.pmu.battPct, p.pmu.charging);   // EICAS gauge colour (S1)
+        // S4: the LOW FUEL caution is replaced by STALL / PULL UP warnings with hysteresis (core::BatteryAlarm).
+        switch (s_alarmEnabled ? s_battAlarm.update(p.pmu.battPct, p.pmu.charging, true) : core::BattAction::None) {
+        case core::BattAction::RaiseStall:
+            AlertManager::raise(core::AlertId::Stall);
+            break;
+        case core::BattAction::RaiseStallAcked:
+            AlertManager::clear(core::AlertId::PullUp);
+            AlertManager::raiseAcked(core::AlertId::Stall);   // stepping down doesn't nag again
+            break;
+        case core::BattAction::RaisePullUp:
+            AlertManager::clear(core::AlertId::Stall);
+            AlertManager::raise(core::AlertId::PullUp);
+            break;
+        case core::BattAction::ClearAll:
+            AlertManager::clear(core::AlertId::Stall);
+            AlertManager::clear(core::AlertId::PullUp);
+            break;
+        case core::BattAction::None:
+            break;
         }
     }
     p.flowSamples = uint8_t(s_flow.count());
@@ -172,20 +193,28 @@ static void cmdFuel(int, const char* const*, core::Reply& r)
     r.line(b);
 }
 
-static void cmdFuelSim(int, const char* const* argv, core::Reply& r)
+void enableBatteryAlarm() { s_alarmEnabled = true; }
+
+static void cmdFuelSim(int argc, const char* const* argv, core::Reply& r)
 {
     if (strcmp(argv[0], "off") == 0) {
         s_simPct = -1;
+        s_simChg = -1;
         r.ok();
         return;
     }
     char* end = nullptr;
     long v = strtol(argv[0], &end, 10);
-    if (!end || *end != '\0' || v < 0 || v > 100) {
-        r.err("expected 0..100|off");
+    int chg = -1;
+    if (argc >= 2) {
+        chg = strcmp(argv[1], "chg") == 0 ? 1 : strcmp(argv[1], "nochg") == 0 ? 0 : -2;
+    }
+    if (!end || *end != '\0' || v < 0 || v > 100 || chg == -2) {
+        r.err("expected 0..100|off [chg|nochg]");
         return;
     }
     s_simPct = int(v);
+    s_simChg = chg;
     r.ok();
 }
 

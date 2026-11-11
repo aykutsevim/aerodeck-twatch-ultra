@@ -19,6 +19,9 @@ static const SettingDef kDefs[] = {
     {"lastsync", SettingType::I32, 0, 0, 0x7FFFFFFF, 0, false, false}, // UTC s of the last successful sync
     // S3 (schema 4)
     {"wxstn", SettingType::Str, 0, 4, 4, 0, false, true, "LTAC"},   // METAR station (ICAO)
+    // S4 (schema 5)
+    {"hapticlvl", SettingType::U8, 1, 0, 2, 0, false, true},   // vibration: 0 off, 1 low, 2 high
+    {"quiet", SettingType::Bool, 0, 0, 1, 0, false, true},     // quiet mode (audio + caution/advisory haptics)
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 
