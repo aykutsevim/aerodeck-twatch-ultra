@@ -8,7 +8,7 @@
 #include "core/ClockMath.h"
 #include "core/PosixTz.h"
 #include "core/Zones.h"
-#include "services/Cautions.h"
+#include "services/AlertManager.h"
 #include "services/EventBus.h"
 #include "services/Log.h"
 #include "services/SerialConsole.h"
@@ -69,7 +69,7 @@ void begin()
         LOGW("time", "RTC unavailable");
     }
     if (!s_valid) {
-        Cautions::raise(CautionId::ClockNotSet, "CLOCK NOT SET");
+        AlertManager::raise(core::AlertId::ClockNotSet);
     }
     refresh();
 
@@ -173,7 +173,7 @@ bool set(int64_t utc)
     setSystemTime(utc);
     s_valid = core::clockPlausible(y);
     if (s_valid) {
-        Cautions::clear(CautionId::ClockNotSet);
+        AlertManager::clear(core::AlertId::ClockNotSet);
     }
     refresh();
     EventBus::publish(EventType::ClockChanged);

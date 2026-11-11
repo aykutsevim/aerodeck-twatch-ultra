@@ -139,10 +139,10 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | FR-ALR-001 | M | A central Alert Manager shall accept raise/clear requests with a level (WARNING/CAUTION/ADVISORY), an ID and a message, and show the highest active alert as a master annunciator. |
 | FR-ALR-002 | M | Each alert type shall map to a configurable haptic pattern and an optional voice callout. |
 | FR-ALR-003 | M | The user shall be able to acknowledge an alert (tap the annunciator), which stops repeating haptic/audio output. |
-| FR-ALR-004 | M | A quiet mode setting shall suppress audio while keeping haptics for WARNING-level alerts. |
+| FR-ALR-004 | M | A quiet mode setting shall suppress audio while keeping haptics for WARNING-level alerts. *(S4: quiet mode also silences CAUTION/ADVISORY vibration; UI clicks are unaffected.)* |
 | FR-HAP-001 | M | UI page changes and toggle controls shall play a crisp click waveform (DRV2605 library effect, default *Sharp Click*). |
-| FR-HAP-002 | M | Battery dropping below **15 %** (not charging) shall raise a WARNING with a pulsing heavy **STICK SHAKER** pattern and a "STALL" annunciator. |
-| FR-HAP-003 | S | Haptic intensity shall be user-selectable (off / low / high). |
+| FR-HAP-002 | M | Battery dropping below **15 %** (not charging) shall raise a WARNING with a pulsing heavy **STICK SHAKER** pattern and a "STALL" annunciator. *(S4: repeats every 2 s until acknowledged; ≤5 % escalates to PULL UP (haptic in S4, voice in S5); clears at ≥17 % / ≥7 % (2 % hysteresis) or on charging; replaces the S1 LOW FUEL caution.)* |
+| FR-HAP-003 | S | Haptic intensity shall be user-selectable (off / low / high). *(S4: default low; WARNING patterns always play at full strength, even when off.)* |
 | FR-AUD-001 | M | The system shall play WAV assets from the on-board filesystem through the I2S amplifier. |
 | FR-AUD-002 | M | A cabin chime shall play at the top of every hour, unless quiet mode is on or night hours are set (configurable, default 22:00–07:00). |
 | FR-AUD-003 | M | Voice callouts shall exist for at least: *Master Caution*, *Pull Up* (critical battery ≤5 %), *Bingo Fuel* (timer end), *Minimums* (generic alarm). |

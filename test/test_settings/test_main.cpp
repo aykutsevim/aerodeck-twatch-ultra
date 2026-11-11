@@ -153,7 +153,6 @@ static void test_migrate_tzoff_to_tzid()
 // S3 schema v4: weather station (additive).
 static void test_schema_v4_wxstn()
 {
-    TEST_ASSERT_EQUAL(4, kSchemaVersion);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(3, 4, true)));
     const SettingDef& w = settingDef(SettingKey::WxStation);
     TEST_ASSERT_EQUAL_STRING("wxstn", w.key);
@@ -186,6 +185,27 @@ static void test_validate_station()
     TEST_ASSERT_EQUAL_STRING("MyNet", ssid);
 }
 
+// S4 schema v5: haptic level, quiet mode (additive).
+static void test_schema_v5_haptics()
+{
+    TEST_ASSERT_EQUAL(5, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(4, 5, true)));
+    const SettingDef& h = settingDef(SettingKey::HapticLvl);
+    TEST_ASSERT_EQUAL_STRING("hapticlvl", h.key);
+    TEST_ASSERT_EQUAL(int(SettingType::U8), int(h.type));
+    TEST_ASSERT_EQUAL(1, h.def);
+    TEST_ASSERT_EQUAL(0, h.min);
+    TEST_ASSERT_EQUAL(2, h.max);
+    TEST_ASSERT_TRUE(h.editable);
+    const SettingDef& q = settingDef(SettingKey::Quiet);
+    TEST_ASSERT_EQUAL_STRING("quiet", q.key);
+    TEST_ASSERT_EQUAL(int(SettingType::Bool), int(q.type));
+    TEST_ASSERT_EQUAL(0, q.def);
+    TEST_ASSERT_TRUE(q.editable);
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::HapticLvl, 2));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::HapticLvl, 3));
+}
+
 static void test_s0_settings_have_no_step()
 {
     TEST_ASSERT_EQUAL(0, settingDef(SettingKey::Bright).step);
@@ -216,6 +236,7 @@ int main()
     RUN_TEST(test_migrate_tzoff_to_tzid);
     RUN_TEST(test_schema_v4_wxstn);
     RUN_TEST(test_validate_station);
+    RUN_TEST(test_schema_v5_haptics);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

@@ -41,6 +41,34 @@ public:
         return true;
     }
 
+    // S4: play a DRV2605 sequence (ROM effect ids; 0x80|n = wait n x 10 ms). Runs from any task (I2C lock).
+    bool haptic(const uint8_t* seq, uint8_t n) override
+    {
+        if (periph(Periph::Haptics) != PeriphState::Ok || !seq || n == 0) {
+            return false;
+        }
+        if (n > 7) {
+            n = 7;   // 8 slots: the last one terminates the sequence
+        }
+        I2cLock lock;
+        instance.drv.stop();
+        for (uint8_t i = 0; i < n; i++) {
+            instance.drv.setWaveform(i, seq[i]);
+        }
+        instance.drv.setWaveform(n, 0);
+        instance.drv.run();
+        return true;
+    }
+
+    void hapticStop() override
+    {
+        if (periph(Periph::Haptics) != PeriphState::Ok) {
+            return;
+        }
+        I2cLock lock;
+        instance.drv.stop();
+    }
+
     BootResult begin(uint16_t simFailMask, bool safeMode, bool headless) override
     {
         BootResult r{true, safeMode, 0};

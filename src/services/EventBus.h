@@ -7,7 +7,7 @@
 enum class EventType : uint16_t {
     PageChanged = 1,          // a = from PageId, b = to PageId
     SettingsChanged,          // a = SettingKey
-    CautionChanged,
+    AlertChangedReserved,     // (S0 CautionChanged, retired in S4: use AlertRaised/AlertCleared/AlertAcked)
     ButtonClick,
     PowerSnapshotUpdated,
     PeriphStatusChanged,      // deferred probe finished
@@ -16,6 +16,9 @@ enum class EventType : uint16_t {
     ClockChanged,             // S1: clock set via serial / S2: sync
     NetStatusChanged,         // S2: NetService status snapshot updated
     WeatherUpdated,           // S3: a weather fetch completed (a = WxResult)
+    AlertRaised,              // S4: a = AlertId (new, re-armed or updated)
+    AlertCleared,             // S4: a = AlertId
+    AlertAcked,               // S4: a = number newly acknowledged
 };
 
 struct Event {

@@ -5,6 +5,8 @@
 #include <ctime>
 #include "services/NetService.h"
 #include "services/SettingsStore.h"
+#include "services/AlertManager.h"
+#include "ui/HapticClick.h"
 #include "ui/Theme.h"
 
 #ifndef AD_FW_VERSION
@@ -36,6 +38,7 @@ lv_obj_t* smallButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb, void
     lv_obj_add_style(b, Theme::button(), 0);
     lv_obj_set_size(b, Theme::S(48), Theme::S(48));
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, user);
+    HapticClick::attach(b);
     lv_obj_t* l = lv_label_create(b);
     lv_label_set_text(l, text);
     lv_obj_center(l);
@@ -91,6 +94,8 @@ void restoreClicked(lv_event_t*)
     lv_obj_set_height(ok, Theme::S(48));
     lv_obj_add_event_cb(cancel, msgboxCancel, LV_EVENT_CLICKED, mb);
     lv_obj_add_event_cb(ok, msgboxConfirm, LV_EVENT_CLICKED, mb);
+    HapticClick::attach(cancel);
+    HapticClick::attach(ok);
     lv_obj_set_width(mb, lv_pct(80));
     lv_obj_center(mb);
 }
@@ -117,6 +122,8 @@ void forgetClicked(lv_event_t*)
     lv_obj_set_height(ok, Theme::S(48));
     lv_obj_add_event_cb(cancel, msgboxCancel, LV_EVENT_CLICKED, mb);
     lv_obj_add_event_cb(ok, forgetConfirm, LV_EVENT_CLICKED, mb);
+    HapticClick::attach(cancel);
+    HapticClick::attach(ok);
     lv_obj_set_width(mb, lv_pct(80));
     lv_obj_center(mb);
 }
@@ -231,12 +238,35 @@ void stationClicked(lv_event_t*)
     lv_obj_set_width(ok, Theme::S(70));
 }
 
+// ---- S4: alerts ----
+
+void vibChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::HapticLvl, int32_t(lv_dropdown_get_selected(lv_event_get_target_obj(e))));
+}
+
+void quietChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::Quiet, lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED) ? 1 : 0);
+}
+
+void testAlertClear(lv_timer_t*) { AlertManager::clear(core::AlertId::Test1); }
+
+// Raise a CAUTION for 10 s so the wearer can feel the pattern at the chosen strength.
+void testAlertClicked(lv_event_t*)
+{
+    AlertManager::raise(core::AlertId::Test1, core::AlertLevel::Caution, "TEST ALERT");
+    lv_timer_t* t = lv_timer_create(testAlertClear, 10000, nullptr);
+    lv_timer_set_repeat_count(t, 1);
+}
+
 lv_obj_t* wideButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb)
 {
     lv_obj_t* b = lv_button_create(parent);
     lv_obj_add_style(b, Theme::button(), 0);
     lv_obj_set_flex_grow(b, 1);
     lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+    HapticClick::attach(b);
     lv_obj_t* l = lv_label_create(b);
     lv_label_set_text(l, text);
     lv_obj_center(l);
@@ -278,6 +308,7 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     overlaySw_ = lv_switch_create(r);
     lv_obj_set_size(overlaySw_, Theme::S(56), Theme::S(30));
     lv_obj_add_event_cb(overlaySw_, overlayChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(overlaySw_, true);
     noSwipe(overlaySw_);
 
     r = row(col, "Log level");
@@ -286,6 +317,7 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_set_width(logDd_, Theme::S(110));
     lv_obj_set_style_min_height(logDd_, Theme::S(40), 0);
     lv_obj_add_event_cb(logDd_, logChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(logDd_, true);
     noSwipe(logDd_);
 
     heading(col, "NETWORK & TIME");
@@ -310,20 +342,45 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_t* zb = lv_button_create(r);
     lv_obj_add_style(zb, Theme::button(), 0);
     lv_obj_add_event_cb(zb, zoneClicked, LV_EVENT_CLICKED, nullptr);
+    HapticClick::attach(zb);
     tzVal_ = lv_label_create(zb);
     lv_obj_center(tzVal_);
     r = row(col, "Weather station");   // S3
     lv_obj_t* wb = lv_button_create(r);
     lv_obj_add_style(wb, Theme::button(), 0);
     lv_obj_add_event_cb(wb, stationClicked, LV_EVENT_CLICKED, nullptr);
+    HapticClick::attach(wb);
     wxVal_ = lv_label_create(wb);
     lv_obj_center(wxVal_);
+
+    // S4: ALERTS (FR-013..FR-015)
+    heading(col, "ALERTS");
+    r = row(col, "Vibration");
+    vibDd_ = lv_dropdown_create(r);
+    lv_dropdown_set_options(vibDd_, "Off\nLow\nHigh");
+    lv_obj_set_width(vibDd_, Theme::S(90));
+    lv_obj_set_style_min_height(vibDd_, Theme::S(40), 0);
+    lv_obj_add_event_cb(vibDd_, vibChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(vibDd_, true);
+    noSwipe(vibDd_);
+    r = row(col, "Quiet mode");
+    quietSw_ = lv_switch_create(r);
+    lv_obj_set_size(quietSw_, Theme::S(56), Theme::S(30));
+    lv_obj_add_event_cb(quietSw_, quietChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(quietSw_, true);
+    noSwipe(quietSw_);
+    lv_obj_t* tb = lv_obj_create(col);
+    lv_obj_remove_style_all(tb);
+    lv_obj_set_size(tb, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(tb, LV_FLEX_FLOW_ROW);
+    wideButton(tb, "Test alert", testAlertClicked);
 
     lv_obj_t* rb = lv_button_create(col);
     lv_obj_add_style(rb, Theme::button(), 0);
     lv_obj_set_width(rb, lv_pct(100));
     lv_obj_set_style_bg_color(rb, lv_color_hex(0x502020), 0);
     lv_obj_add_event_cb(rb, restoreClicked, LV_EVENT_CLICKED, nullptr);
+    HapticClick::attach(rb);
     lv_obj_t* rbl = lv_label_create(rb);
     lv_label_set_text(rbl, "Restore defaults");
     lv_obj_center(rbl);
@@ -365,6 +422,12 @@ void SettingsPage::refresh()
     char stn[8];
     SettingsStore::getStr(SettingKey::WxStation, stn, sizeof stn);
     lv_label_set_text(wxVal_, stn);
+    lv_dropdown_set_selected(vibDd_, uint32_t(SettingsStore::get(SettingKey::HapticLvl)));
+    if (SettingsStore::getBool(SettingKey::Quiet)) {
+        lv_obj_add_state(quietSw_, LV_STATE_CHECKED);
+    } else {
+        lv_obj_remove_state(quietSw_, LV_STATE_CHECKED);
+    }
 
     // S2: network & sync status (FR-017)
     char ssid[33];

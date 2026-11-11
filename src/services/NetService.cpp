@@ -9,7 +9,7 @@
 #include "core/ClockMath.h"
 #include "core/Ntp.h"
 #include "core/SyncSchedule.h"
-#include "services/Cautions.h"
+#include "services/AlertManager.h"
 #include "services/EventBus.h"
 #include "services/Log.h"
 #include "services/PowerService.h"
@@ -451,9 +451,9 @@ void tick(uint32_t now)
     if (unsynced != s_unsyncRaised) {
         s_unsyncRaised = unsynced;
         if (unsynced) {
-            Cautions::raise(CautionId::TimeUnsync, "TIME UNSYNC");
+            AlertManager::raise(core::AlertId::TimeUnsync);   // ADVISORY
         } else {
-            Cautions::clear(CautionId::TimeUnsync);
+            AlertManager::clear(core::AlertId::TimeUnsync);
         }
     }
 }

@@ -71,7 +71,8 @@ struct IBoard {
   virtual bool readRtc(tm&) = 0;  virtual bool writeRtc(const tm&) = 0;
   virtual ImuSample readImu() = 0;          // accel (g), gyro (dps) if available
   virtual uint32_t stepCount() = 0;
-  virtual void haptic(uint8_t effectId) = 0;
+  virtual bool haptic(const uint8_t* seq, uint8_t n) = 0;   // S4: DRV2605 sequence (effect ids, 0x80|n = wait)
+  virtual void hapticStop() = 0;
   virtual void configureWake(WakeSources) = 0;
   // accessors for Radio/Audio/Mic/Nfc/Ir/Gnss handles, each nullable
 };
@@ -99,7 +100,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 ### 5.2 UI thread-safety contract
 1. **Only the `ui` task calls LVGL.** No exceptions.
 2. Services publish **snapshots**: small POD structs in a double-buffered, seqlock-protected slot. Pages read the latest snapshot in an `lv_timer` callback (`AttitudeSnapshot`, `PowerSnapshot`, `TimeSnapshot`, `WeatherSnapshot`, `TcasSnapshot`, `RecorderSnapshot`, `ChronoSnapshot`, `MicSnapshot`).
-3. Discrete happenings go through the **EventBus** (`xQueue` per subscriber, fixed-size `Event{type, u32 a, u32 b}`): `PageChanged`, `AlertRaised/Cleared`, `WeatherUpdated`, `TargetNew`, `ChronoExpired`, `SettingsChanged`, `NvgChanged`, `EjectRequested`.
+3. Discrete happenings go through the **EventBus** (`xQueue` per subscriber, fixed-size `Event{type, u32 a, u32 b}`): `PageChanged`, `AlertRaised/Cleared/Acked` (S4; the S0 `CautionChanged` is retired), `WeatherUpdated`, `TargetNew`, `ChronoExpired`, `SettingsChanged`, `NvgChanged`, `EjectRequested`.
 4. Pages send commands to services through thread-safe command functions (`AudioService::play(Clip)`, `NetService::requestSync()`), which post to the service's queue.
 
 ### 5.3 Key sequences
@@ -121,8 +122,8 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `TimeService` | S2 | RTC↔system clock, TZ, sync scheduling, last-sync age | `TimeSnapshot` |
 | `NetService` | S2 | `net` task (core 0) with a command queue; Wi-Fi via `RailLease(Rail::Wifi)` through `PowerService` (switch hook); STA connect with classified failures; minimal SNTP client (`core::Ntp`); `core::SyncSchedule` (boot, interval, backoff); TIME UNSYNC; `SetupPortal` (SoftAP + DNS captive portal + WebServer, one-time code, 5-min session); ADR-012 | `NetStatus` snapshot, `NetStatusChanged` |
 | `WeatherService` | S3 | METAR fetch over HTTPS (`aviationweather.gov`, `format=raw`, certificate verified against built-in DigiCert roots) run by the `net` task inside the sync session or on demand (one 15 s deadline); pure `core::Metar` decoder and `core::HttpResp` parser; size-based mbedTLS allocator (blocks ≥4 KB in PSRAM); last good report cached in NVS (`wxcache` blob); `WxResult` failure reasons; STALE > 90 min | `WeatherSnapshot`, `WeatherUpdated` |
-| `AlertManager` | S4 | Raise/clear/ack, priority arbitration (`alert_arbiter`), haptic/audio mapping table | `AlertRaised/Cleared` |
-| `HapticService` | S4 | DRV2605 effect & pattern sequencer, intensity | — |
+| `AlertManager` | S4 | Single alert path (replaces the S0 `Cautions` list): raise/clear/ack from any task, `core::AlertSet` (order: level, then raise sequence; higher level re-arms) and the `core::Alerts` table (id → level, pattern, repeat, voice clip for S5); WARNING stick shaker repeated every 2 s until acknowledged; `AnnunciatorBar` band on the top layer (flash until ack, cycle when acked, tap = ack all) | `AlertSnapshot`, `AlertRaised/Cleared/Acked` |
+| `HapticService` | S4 | `core::HapticPolicy` (effect sequence per pattern × intensity × quiet; WARNING always full strength) + priority (a click never cuts a warning; never queued); plays via `IBoard::haptic(seq)`; `click()` safe from the UI task (~0.5 ms) | — |
 | `AudioService` | S5 | Clip queue, WAV from LittleFS, volume, amp rail lease, chime scheduler | — |
 | `RecorderService` | S6 | Steps→NM, Max G, daily rollover, 7-day ring | `RecorderSnapshot` |
 | `ChronoService` | S8 | Countdown model (`drop_tank_model`), Pomodoro, survives sleep via RTC RAM + wake timer | `ChronoSnapshot`, `ChronoExpired` |
@@ -138,7 +139,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 ### 7.1 Persistent storage
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
-| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
 | Recorder | NVS `rec` (hourly) + `RTC_DATA_ATTR` (on sleep) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
 | Assets | FAT partition `ffat` (mounted and USB-exposed by LilyGoLib, ADR-009) `/audio/*.wav` (16-bit PCM, mono, 16 kHz) | chime, master_caution, pull_up, bingo_fuel, minimums, traffic |

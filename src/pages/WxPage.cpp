@@ -8,6 +8,7 @@
 #include "services/NetService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
+#include "ui/HapticClick.h"
 #include "ui/Theme.h"
 
 namespace Metar = core::Metar;
@@ -187,6 +188,7 @@ void WxPage::onCreate(lv_obj_t* scr)
     lv_obj_align(btn_, LV_ALIGN_BOTTOM_MID, 0, -Theme::S(kBtnBottom));
     lv_obj_set_style_bg_color(btn_, Theme::dim(), LV_STATE_DISABLED);
     lv_obj_add_event_cb(btn_, refreshCb, LV_EVENT_CLICKED, this);
+    HapticClick::attach(btn_);
     lv_obj_t* bl = lv_label_create(btn_);
     lv_label_set_text(bl, LV_SYMBOL_REFRESH " REFRESH");
     lv_obj_center(bl);

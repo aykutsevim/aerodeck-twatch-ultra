@@ -36,6 +36,8 @@ using RailHook = void (*)(bool on);
 void setRailHook(core::Rail r, RailHook fn);
 // Re-applies OFF to every optional rail with no lease (e.g. after vendor init powered them).
 void enforceIdleRails();
+// S4: start the STALL / PULL UP alarm (called when the watch face first appears, spec edge case).
+void enableBatteryAlarm();
 void tick(uint32_t nowMs);
 void registerCommands();   // `ad fuel`, `ad fuel sim`
 } // namespace PowerService
