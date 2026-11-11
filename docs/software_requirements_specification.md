@@ -85,7 +85,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 3.1 Platform & navigation (PLT)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| FR-PLT-001 | M | The system shall boot to the PFD watch face within 3 s of power-on or wake from deep sleep. |
+| FR-PLT-001 | M | The system shall boot to the PFD watch face within 4 s of power-on or wake from deep sleep. *(Amended in S0 from 3 s; the measured hardware/vendor floor is ~3.45 s.)* |
 | FR-PLT-002 | M | The system shall show MFD pages in a fixed ring. Swiping left/right shall move to the next/previous page, wrapping at the ends. |
 | FR-PLT-003 | M | A short press of the physical button shall return to the PFD from any page. A press on the PFD shall go to the most recently used MFD page. |
 | FR-PLT-004 | M | Each page shall get lifecycle events (enter, exit, suspend). A page shall release hardware it no longer needs on exit. |
@@ -302,7 +302,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | # | Issue | Proposed resolution |
 | :--- | :--- | :--- |
 | OI-1 | Can the BHI260AP wake the ESP32-S3 from deep sleep directly (interrupt pin routing on Ultra)? | Verify in S7. Fall back to button-only wake plus timer wake for the chronograph. |
-| OI-2 | Is 60 FPS full-horizon redraw feasible at 502×410 over QSPI? | Measure in S1. NFR-PERF-001 guarantees 30 FPS. |
+| OI-2 | Is 60 FPS full-horizon redraw feasible at 502×410 over QSPI? | Measure in S1. NFR-PERF-001 guarantees 30 FPS. S0 measured full-screen page transitions at 15–28 FPS with LilyGoLib's 1/6-screen DMA buffers; S1 must tune rendering (buffer size, partial invalidation, lighter styles). |
 | OI-3 | On-device keyword spotting memory/CPU budget. | S10 starts with FFT acoustic gestures. Keyword spotting is a stretch goal. |
 | OI-4 | Codec2 on Arduino-ESP32 2.x build integration. | S13 is experimental and gated by a spike. |
 | OI-5 | Migrate to Arduino-ESP32 3.x (IDF 5) to drop the LilyGoLib patch? | Re-evaluate after S5. A migration would be its own slice. |
