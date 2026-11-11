@@ -169,6 +169,68 @@ void zoneClicked(lv_event_t*)
     lv_obj_set_width(ok, Theme::S(70));
 }
 
+// ---- S3: weather station picker (four A-Z rollers, contracts/wx_page.md) ----
+
+struct StationPicker {
+    lv_obj_t* box;
+    lv_obj_t* rollers[4];
+};
+StationPicker s_picker;
+
+void stationApply(lv_event_t*)
+{
+    char code[5];
+    for (int i = 0; i < 4; i++) {
+        code[i] = char('A' + lv_roller_get_selected(s_picker.rollers[i]));
+    }
+    code[4] = '\0';
+    SettingsStore::setStr(SettingKey::WxStation, code);   // WeatherService clears the old report and fetches (FR-016)
+    lv_obj_delete(s_picker.box);
+}
+
+void stationCancel(lv_event_t*) { lv_obj_delete(s_picker.box); }
+
+void stationClicked(lv_event_t*)
+{
+    static const char kLetters[] = "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ";
+    char cur[8] = {0};
+    SettingsStore::getStr(SettingKey::WxStation, cur, sizeof cur);
+    lv_obj_t* box = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(box, lv_pct(84), lv_pct(62));
+    lv_obj_center(box);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t* t = lv_label_create(box);
+    lv_obj_add_style(t, Theme::title(), 0);
+    lv_label_set_text(t, "Weather station");
+    lv_obj_t* wheels = lv_obj_create(box);
+    lv_obj_remove_style_all(wheels);
+    lv_obj_set_size(wheels, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(wheels, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(wheels, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    s_picker.box = box;
+    for (int i = 0; i < 4; i++) {
+        lv_obj_t* r = lv_roller_create(wheels);
+        lv_roller_set_options(r, kLetters, LV_ROLLER_MODE_INFINITE);
+        lv_roller_set_visible_row_count(r, 3);
+        lv_obj_set_width(r, Theme::S(40));
+        lv_obj_set_style_text_font(r, Theme::fontTitle(), 0);
+        const char c = (cur[i] >= 'A' && cur[i] <= 'Z') ? cur[i] : 'A';
+        lv_roller_set_selected(r, uint32_t(c - 'A'), LV_ANIM_OFF);
+        lv_obj_remove_flag(r, LV_OBJ_FLAG_GESTURE_BUBBLE);
+        s_picker.rollers[i] = r;
+    }
+    lv_obj_t* btns = lv_obj_create(box);
+    lv_obj_remove_style_all(btns);
+    lv_obj_set_size(btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btns, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t* c = smallButton(btns, "Cancel", stationCancel, nullptr);
+    lv_obj_set_width(c, Theme::S(70));
+    lv_obj_t* ok = smallButton(btns, "OK", stationApply, nullptr);
+    lv_obj_set_width(ok, Theme::S(70));
+}
+
 lv_obj_t* wideButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb)
 {
     lv_obj_t* b = lv_button_create(parent);
@@ -250,6 +312,12 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_add_event_cb(zb, zoneClicked, LV_EVENT_CLICKED, nullptr);
     tzVal_ = lv_label_create(zb);
     lv_obj_center(tzVal_);
+    r = row(col, "Weather station");   // S3
+    lv_obj_t* wb = lv_button_create(r);
+    lv_obj_add_style(wb, Theme::button(), 0);
+    lv_obj_add_event_cb(wb, stationClicked, LV_EVENT_CLICKED, nullptr);
+    wxVal_ = lv_label_create(wb);
+    lv_obj_center(wxVal_);
 
     lv_obj_t* rb = lv_button_create(col);
     lv_obj_add_style(rb, Theme::button(), 0);
@@ -294,6 +362,9 @@ void SettingsPage::refresh()
     }
     lv_dropdown_set_selected(logDd_, uint32_t(SettingsStore::get(SettingKey::LogLvl)));
     lv_label_set_text(tzVal_, core::Zones::at(size_t(SettingsStore::get(SettingKey::TzId))).name);
+    char stn[8];
+    SettingsStore::getStr(SettingKey::WxStation, stn, sizeof stn);
+    lv_label_set_text(wxVal_, stn);
 
     // S2: network & sync status (FR-017)
     char ssid[33];

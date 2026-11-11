@@ -81,6 +81,21 @@ lv_color_t caution() { return lv_color_hex(0xFFB000); }
 lv_color_t warning() { return lv_color_hex(0xFF3030); }
 lv_color_t advisory() { return lv_color_hex(0x00C8FF); }
 lv_color_t accent() { return lv_color_hex(0x3A7BD5); }
+lv_color_t catVfr() { return lv_color_hex(0x00C000); }
+lv_color_t catMvfr() { return lv_color_hex(0x3A7BFF); }
+lv_color_t catIfr() { return lv_color_hex(0xFF3030); }
+lv_color_t catLifr() { return lv_color_hex(0xFF40FF); }
+lv_color_t catUnknown() { return dim(); }
+lv_color_t catColor(core::Metar::Category c)
+{
+    switch (c) {
+    case core::Metar::Category::Vfr: return catVfr();
+    case core::Metar::Category::Mvfr: return catMvfr();
+    case core::Metar::Category::Ifr: return catIfr();
+    case core::Metar::Category::Lifr: return catLifr();
+    default: return catUnknown();
+    }
+}
 
 const lv_font_t* fontSmall() { return s_small; }
 const lv_font_t* fontBody() { return s_bodyFont; }

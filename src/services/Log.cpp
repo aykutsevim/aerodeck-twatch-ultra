@@ -35,12 +35,12 @@ void logf(core::Lvl lvl, const char* tag, const char* fmt, ...)
     if (!core::shouldLog(lvl, s_level)) {
         return;
     }
-    char msg[160];
+    char msg[288];   // S3: a full raw METAR (255) fits
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(msg, sizeof msg, fmt, ap);
     va_end(ap);
-    char line[200];
+    char line[320];
     core::formatLogLine(line, sizeof line, millis(), lvl, tag, msg);
     emit(line);
 }

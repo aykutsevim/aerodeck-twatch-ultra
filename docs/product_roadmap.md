@@ -33,7 +33,7 @@ M5 Experimental ── S12 , S13
 | **S0** | Platform foundation | M0 | — | Must | M | Clean-checkout build incl. LilyGoLib patch; HAL; page ring with 2 placeholder pages + Settings; NVS settings; rail leases; FPS/heap overlay; native test env green | ✅ Done (2026-11-11, PR #1) · manual: T032, T039, T063 |
 | **S1** | PFD watch face | M1 | S0 | Must | L | Horizon follows wrist at ≥30 FPS, LOCK indicator, H/M/S tapes, Zulu/Local, EICAS from PMU | ✅ Done (2026-11-11, PR #2) · manual: T014, T018, T034, T043 |
 | **S2** | Time sync & connectivity | M1 | S0 | Must | M | Provision Wi-Fi; NTP sync at boot + hourly writes RTC; correct TZ; Wi-Fi off after sync | ✅ Done (2026-11-11, PR #3) · manual: T017, T020, T026 (SC-004), T038 (24-h soak) |
-| **S3** | METAR weather page | M1 | S2 | Must | M | LTAC METAR decoded and shown with flight category; STALE/error handling; parser unit tests | ⏳ Planned |
+| **S3** | METAR weather page | M1 | S2 | Must | M | LTAC METAR decoded and shown with flight category; STALE/error handling; parser unit tests | 🚧 In progress (branch `004-metar-weather`, spec) |
 | **S4** | Alert Manager & haptics | M2 | S0 | Must | M | Master annunciator; click haptics on nav; <15 % battery → stick shaker + STALL; ack works | ⏳ Planned |
 | **S5** | GPWS audio | M2 | S4 | Must | M | WAV callouts from LittleFS; hourly chime with quiet hours; amp rail off when idle | ⏳ Planned |
 | **S6** | G-force & flight recorder | M2 | S1 | Must | M | Daily NM + Max G on PFD and Recorder page; 7-day history survives reboot | ⏳ Planned |

@@ -36,17 +36,25 @@ static bool readKey(Preferences& p, const SettingDef& d, int32_t& out)
     return true;
 }
 
-static void readStr(Preferences& p, size_t i, const SettingDef& d)
+static const char* strDefault(const SettingDef& d) { return d.sdef ? d.sdef : ""; }
+
+// Returns true when the key was present in NVS.
+static bool readStr(Preferences& p, size_t i, const SettingDef& d)
 {
     char buf[kStrMax] = {0};
-    if (p.isKey(d.key)) {
+    const bool has = p.isKey(d.key);
+    if (has) {
         p.getString(d.key, buf, sizeof buf);
+    } else {
+        strncpy(buf, strDefault(d), kStrMax - 1);
     }
     if (buf[0] != '\0' && !validateString(SettingKey(i), buf)) {
-        LOGW("set", "setting '%s' invalid length; cleared", d.key);   // key only, never value
-        buf[0] = '\0';
+        LOGW("set", "setting '%s' invalid; using default", d.key);   // key only, never value
+        strncpy(buf, strDefault(d), kStrMax - 1);
     }
+    normalizeString(SettingKey(i), buf);
     memcpy(s_str[i], buf, kStrMax);
+    return has;
 }
 
 static void writeKey(Preferences& p, const SettingDef& d, int32_t v)
@@ -81,7 +89,12 @@ static void writeDefaults(Preferences& p)
         const SettingDef& d = settingDef(SettingKey(i));
         s_cache[i] = d.def;
         if (d.type == SettingType::Str) {
-            s_str[i][0] = '\0';   // restore defaults also forgets the Wi-Fi network
+            // restore defaults also forgets the Wi-Fi network; wxstn returns to LTAC
+            strncpy(s_str[i], strDefault(d), kStrMax - 1);
+            s_str[i][kStrMax - 1] = '\0';
+            if (s_str[i][0] != '\0') {
+                p.putString(d.key, s_str[i]);
+            }
             continue;
         }
         writeKey(p, d, d.def);
@@ -134,7 +147,10 @@ BootStatus begin()
     for (size_t i = 0; i < settingCount(); i++) {
         const SettingDef& d = settingDef(SettingKey(i));
         if (d.type == SettingType::Str) {
-            readStr(p, i, d);
+            if (!readStr(p, i, d) && status == BootStatus::Migrated && d.sdef) {
+                p.putString(d.key, s_str[i]);   // key added by the new schema (v4 wxstn): persist its default
+                LOGI("set", "migration added '%s'", d.key);
+            }
             continue;
         }
         int32_t v = 0;
@@ -212,7 +228,11 @@ SetResult setStr(SettingKey k, const char* v)
     if (!validateString(k, v)) {
         return SetResult::OutOfRange;
     }
-    storeStr(k, v);
+    char buf[kStrMax];
+    strncpy(buf, v, kStrMax - 1);
+    buf[kStrMax - 1] = '\0';
+    normalizeString(k, buf);
+    storeStr(k, buf);
     return SetResult::Ok;
 }
 
@@ -226,10 +246,14 @@ void clearStr(SettingKey k)
 void restoreDefaults()
 {
     for (size_t i = 0; i < settingCount(); i++) {
-        s_cache[i] = settingDef(SettingKey(i)).def;
-        s_str[i][0] = '\0';
+        const SettingDef& d = settingDef(SettingKey(i));
+        s_cache[i] = d.def;
+        portENTER_CRITICAL(&s_strLock);
+        strncpy(s_str[i], strDefault(d), kStrMax - 1);
+        s_str[i][kStrMax - 1] = '\0';
+        portEXIT_CRITICAL(&s_strLock);
     }
-    uint8_t item = kRestoreAll;
+    uint8_t item = kRestoreAll;   // writeDefaults() clears the namespace, including blobs (wxcache)
     if (s_writes) {
         xQueueSend(s_writes, &item, 0);
     }
@@ -267,6 +291,60 @@ void tick(uint32_t)
         }
     } while (xQueueReceive(s_writes, &item, 0) == pdTRUE);
     p.end();
+}
+
+// ---- blobs: internal cached data, not settings (S3 research R7) ----
+
+static bool blobKeyOk(const char* key)
+{
+    return key && key[0] && strlen(key) <= 15 && findSettingKey(key) < 0 && strcmp(key, kSchemaKey) != 0;
+}
+
+size_t getBlob(const char* key, void* buf, size_t cap)
+{
+    if (!blobKeyOk(key) || !buf || !s_storageOk) {
+        return 0;
+    }
+    Preferences p;
+    if (!p.begin(kNamespace, true)) {
+        return 0;
+    }
+    size_t n = p.isKey(key) ? p.getBytesLength(key) : 0;
+    if (n == 0 || n > cap) {
+        p.end();
+        return 0;
+    }
+    n = p.getBytes(key, buf, n);
+    p.end();
+    return n;
+}
+
+bool setBlob(const char* key, const void* data, size_t len)
+{
+    if (!blobKeyOk(key) || !data || len == 0 || !s_storageOk) {
+        return false;
+    }
+    Preferences p;
+    if (!p.begin(kNamespace, false)) {
+        return false;
+    }
+    const bool ok = p.putBytes(key, data, len) == len;
+    p.end();
+    return ok;
+}
+
+void eraseBlob(const char* key)
+{
+    if (!blobKeyOk(key) || !s_storageOk) {
+        return;
+    }
+    Preferences p;
+    if (p.begin(kNamespace, false)) {
+        if (p.isKey(key)) {
+            p.remove(key);
+        }
+        p.end();
+    }
 }
 
 // ---- serial commands (contracts/serial_commands.md) ----
@@ -310,9 +388,19 @@ static void cmdSet(int, const char* const* argv, core::Reply& r)
         r.err("no such key");
         return;
     }
+    const SettingDef& d = settingDef(SettingKey(k));
+    if (d.type == SettingType::Str) {
+        if (!d.editable) {
+            r.err("not editable");
+        } else if (setStr(SettingKey(k), argv[1]) != SetResult::Ok) {
+            r.err("invalid");
+        } else {
+            r.ok();
+        }
+        return;
+    }
     char* end = nullptr;
     long v = strtol(argv[1], &end, 0);
-    const SettingDef& d = settingDef(SettingKey(k));
     char msg[48];
     if (!end || *end != '\0') {
         if (d.step > 0) {

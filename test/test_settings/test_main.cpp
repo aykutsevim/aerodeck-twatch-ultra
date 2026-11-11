@@ -91,7 +91,6 @@ static void test_format_masks_secret()
 // S2 schema v3: tzoff replaced by tzid; Wi-Fi strings; sync interval; last sync.
 static void test_schema_v3()
 {
-    TEST_ASSERT_EQUAL(3, kSchemaVersion);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(2, 3, true)));
     TEST_ASSERT_EQUAL(-1, findSettingKey("tzoff"));
 }
@@ -151,6 +150,42 @@ static void test_migrate_tzoff_to_tzid()
     TEST_ASSERT_EQUAL_STRING("Kolkata", Zones::at(migrateTzoffToTzid(330)).name);
 }
 
+// S3 schema v4: weather station (additive).
+static void test_schema_v4_wxstn()
+{
+    TEST_ASSERT_EQUAL(4, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(3, 4, true)));
+    const SettingDef& w = settingDef(SettingKey::WxStation);
+    TEST_ASSERT_EQUAL_STRING("wxstn", w.key);
+    TEST_ASSERT_EQUAL(int(SettingType::Str), int(w.type));
+    TEST_ASSERT_EQUAL(4, w.min);
+    TEST_ASSERT_EQUAL(4, w.max);
+    TEST_ASSERT_TRUE(w.editable);
+    TEST_ASSERT_FALSE(w.secret);
+    TEST_ASSERT_NOT_NULL(w.sdef);
+    TEST_ASSERT_EQUAL_STRING("LTAC", w.sdef);
+    TEST_ASSERT_EQUAL(int(SettingKey::WxStation), findSettingKey("wxstn"));
+    // Existing string settings have no string default (empty).
+    TEST_ASSERT_NULL(settingDef(SettingKey::WifiSsid).sdef);
+}
+
+static void test_validate_station()
+{
+    TEST_ASSERT_TRUE(validateString(SettingKey::WxStation, "LTAC"));
+    TEST_ASSERT_TRUE(validateString(SettingKey::WxStation, "ltfm"));   // case-insensitive
+    TEST_ASSERT_FALSE(validateString(SettingKey::WxStation, "LTA"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WxStation, "LTACX"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WxStation, "LT1C"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WxStation, ""));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WxStation, "LT C"));
+    char v[8] = "ltfm";
+    normalizeString(SettingKey::WxStation, v);
+    TEST_ASSERT_EQUAL_STRING("LTFM", v);
+    char ssid[8] = "MyNet";
+    normalizeString(SettingKey::WifiSsid, ssid);   // other strings untouched
+    TEST_ASSERT_EQUAL_STRING("MyNet", ssid);
+}
+
 static void test_s0_settings_have_no_step()
 {
     TEST_ASSERT_EQUAL(0, settingDef(SettingKey::Bright).step);
@@ -179,6 +214,8 @@ int main()
     RUN_TEST(test_validate_strings);
     RUN_TEST(test_tzid_syncmin_lastsync);
     RUN_TEST(test_migrate_tzoff_to_tzid);
+    RUN_TEST(test_schema_v4_wxstn);
+    RUN_TEST(test_validate_station);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

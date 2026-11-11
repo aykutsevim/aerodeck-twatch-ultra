@@ -103,7 +103,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 4. Pages send commands to services through thread-safe command functions (`AudioService::play(Clip)`, `NetService::requestSync()`), which post to the service's queue.
 
 ### 5.3 Key sequences
-**Hourly sync (S2/S3):** `TimeService` timer → `NetService::requestSync()` → `net` task: lease Wi-Fi → connect (≤15 s) → SNTP → `board().writeRtc()` → `WeatherService::fetch()` (HTTPS GET, parse with `metar_parser`) → publish `WeatherSnapshot`, `TimeSnapshot` → Wi-Fi off → events.
+**Hourly sync (S2/S3):** `TimeService` timer → `NetService::requestSync()` → `net` task: lease Wi-Fi → connect (≤15 s) → SNTP → `board().writeRtc()` → `WeatherService::fetchOnNet()` (HTTPS GET, parse with `core::Metar`) → publish `WeatherSnapshot`, `TimeSnapshot` → Wi-Fi off → events.
 
 **Low battery (S4):** `PowerService` sees batt <15 % and not charging → `AlertManager::raise(STALL, WARNING)` → arbiter picks the highest alert → event to UI (annunciator) → `HapticService` plays the stick shaker pattern → `AudioService` plays *Master Caution* (unless quiet) → user tap → `ack`.
 
@@ -120,7 +120,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `AttitudeService` | S1 | IMU sampling, complementary filter, level lock detection, peak-g | `AttitudeSnapshot` |
 | `TimeService` | S2 | RTC↔system clock, TZ, sync scheduling, last-sync age | `TimeSnapshot` |
 | `NetService` | S2 | `net` task (core 0) with a command queue; Wi-Fi via `RailLease(Rail::Wifi)` through `PowerService` (switch hook); STA connect with classified failures; minimal SNTP client (`core::Ntp`); `core::SyncSchedule` (boot, interval, backoff); TIME UNSYNC; `SetupPortal` (SoftAP + DNS captive portal + WebServer, one-time code, 5-min session); ADR-012 | `NetStatus` snapshot, `NetStatusChanged` |
-| `WeatherService` | S3 | METAR fetch + parse, staleness | `WeatherSnapshot`, `WeatherUpdated` |
+| `WeatherService` | S3 | METAR fetch over HTTPS (`aviationweather.gov`, `format=raw`, certificate verified against built-in DigiCert roots) run by the `net` task inside the sync session or on demand (one 15 s deadline); pure `core::Metar` decoder and `core::HttpResp` parser; size-based mbedTLS allocator (blocks ≥4 KB in PSRAM); last good report cached in NVS (`wxcache` blob); `WxResult` failure reasons; STALE > 90 min | `WeatherSnapshot`, `WeatherUpdated` |
 | `AlertManager` | S4 | Raise/clear/ack, priority arbitration (`alert_arbiter`), haptic/audio mapping table | `AlertRaised/Cleared` |
 | `HapticService` | S4 | DRV2605 effect & pattern sequencer, intensity | — |
 | `AudioService` | S5 | Clip queue, WAV from LittleFS, volume, amp rail lease, chime scheduler | — |
@@ -138,7 +138,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 ### 7.1 Persistent storage
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
-| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v3 in S2), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
 | Recorder | NVS `rec` (hourly) + `RTC_DATA_ATTR` (on sleep) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
 | Assets | FAT partition `ffat` (mounted and USB-exposed by LilyGoLib, ADR-009) `/audio/*.wav` (16-bit PCM, mono, 16 kHz) | chime, master_caution, pull_up, bingo_fuel, minimums, traffic |

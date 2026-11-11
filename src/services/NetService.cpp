@@ -1,6 +1,7 @@
 #include "services/NetService.h"
 #include <Arduino.h>
 #include <WiFi.h>
+#include <atomic>
 #include <WiFiUdp.h>
 #include <cstdlib>
 #include <cstring>
@@ -16,6 +17,7 @@
 #include "services/SettingsStore.h"
 #include "services/SetupPortal.h"
 #include "services/TimeService.h"
+#include "services/WeatherService.h"
 
 using core::SettingKey;
 
@@ -23,10 +25,11 @@ namespace NetService {
 
 namespace {
 
-enum class Cmd : uint8_t { Sync, Test, Scan, SetupStart };
+enum class Cmd : uint8_t { Sync, Test, Scan, SetupStart, Weather };
 
 constexpr uint32_t kTxnTimeoutMs = 15000;   // FR-008: whole transaction
 constexpr uint32_t kNtpWaitMs = 3000;       // per server
+constexpr uint32_t kWxStepMs = 15000;       // S3 FR-003: weather step inside a sync session
 const char* const kServers[] = {"pool.ntp.org", "time.google.com", "time.cloudflare.com"};
 
 QueueHandle_t s_cmds;
@@ -41,6 +44,7 @@ uint32_t s_seq;
 bool s_lastConfigured;
 int32_t s_lastSyncMin = -1;
 bool s_unsyncRaised;
+std::atomic<bool> s_wxPending{false};   // S3: a weather fetch is requested (coalescing, research R4)
 
 void publish()
 {
@@ -174,6 +178,10 @@ NetResult syncOrTest(bool applyClock)
     const char* server = "";
     r = queryNtp(deadline, t, &server);
     if (r != NetResult::Ok) {
+        if (applyClock) {
+            s_wxPending = false;
+            WeatherService::fetchOnNet(millis() + kWxStepMs);   // FR-004: independent of the time result
+        }
         return r;
     }
     if (applyClock) {
@@ -185,10 +193,35 @@ NetResult syncOrTest(bool applyClock)
         SettingsStore::set(SettingKey::LastSync, int32_t(utc), true);
         s_st.lastSyncUtc = utc;
         LOGI("net", "sync: Ok offset_ms=%lld server=%s", (long long)t.offsetMs, server);
+        // S3: weather in the same radio session (own 15 s budget; clears any pending request).
+        s_wxPending = false;
+        WeatherService::fetchOnNet(millis() + kWxStepMs);
     } else {
         LOGI("net", "test: Ok offset_ms=%lld server=%s", (long long)t.offsetMs, server);
     }
     return NetResult::Ok;
+}
+
+// S3: on-demand weather transaction: connect + fetch share one 15 s deadline (spec FR-003).
+void doWeather()
+{
+    if (!s_wxPending.exchange(false)) {
+        return;   // a sync already fetched since the request (research R4)
+    }
+    char ssid[33], psk[64];
+    if (!credentials(ssid, sizeof ssid, psk, sizeof psk)) {
+        WeatherService::markNoWifi();
+        return;
+    }
+    const uint32_t deadline = millis() + kTxnTimeoutMs;
+    RailLease wifi(core::Rail::Wifi);
+    NetResult r = connectSta(ssid, psk, deadline);
+    memset(psk, 0, sizeof psk);
+    if (r != NetResult::Ok) {
+        WeatherService::failNoNetwork(resultName(r));
+        return;
+    }
+    WeatherService::fetchOnNet(deadline);
 }
 
 void doScan()
@@ -275,6 +308,10 @@ void netTask(void*)
             setBusy(NetBusy::Setup);
             doSetup();
             break;
+        case Cmd::Weather:
+            setBusy(NetBusy::Weather);
+            doWeather();
+            break;
         }
         setBusy(NetBusy::Idle);
     }
@@ -347,12 +384,27 @@ const char* busyName(NetBusy b)
     case NetBusy::Testing: return "Testing";
     case NetBusy::Scanning: return "Scanning";
     case NetBusy::Setup: return "Setup";
+    case NetBusy::Weather: return "Weather";
     default: return "?";
     }
 }
 
 const Snapshot<NetStatus>& status() { return s_snap; }
 void requestSync() { post(Cmd::Sync); }
+
+bool requestWeather()
+{
+    char ssid[33];
+    SettingsStore::getStr(SettingKey::WifiSsid, ssid, sizeof ssid);
+    if (ssid[0] == '\0') {
+        return false;
+    }
+    if (!s_wxPending.exchange(true)) {
+        WeatherService::markPending();
+        post(Cmd::Weather);
+    }
+    return true;
+}
 void requestTest() { post(Cmd::Test); }
 void startSetup() { post(Cmd::SetupStart); }
 void stopSetup() { s_setupStop = true; }

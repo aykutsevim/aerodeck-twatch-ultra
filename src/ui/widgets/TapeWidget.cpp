@@ -54,7 +54,7 @@ void TapeWidget::create(lv_obj_t* parent, Dir dir, int32_t x, int32_t y, int32_t
     lv_obj_set_style_radius(box_, Theme::S(3), 0);
     lv_obj_center(box_);
     boxLbl_ = lv_label_create(box_);
-    lv_obj_set_style_text_font(boxLbl_, &dseg7_40, 0);
+    lv_obj_set_style_text_font(boxLbl_, &dseg7_28, 0);   // 40 px digits filled the box edge to edge (user review, S3)
     lv_obj_set_style_text_color(boxLbl_, Theme::hudGreen(), 0);
     lv_obj_center(boxLbl_);
     setValue(-1);

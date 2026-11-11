@@ -35,7 +35,8 @@ lv_obj_t* PfdPage::smallLabel(lv_obj_t* scr, const core::Box& b, const char* tex
     lv_label_set_text(l, text);
     lv_obj_set_pos(l, b.x, b.y);
     lv_obj_set_size(l, b.w, b.h);
-    lv_obj_set_style_text_align(l, align == LV_ALIGN_TOP_LEFT ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
+    // Text hugs the inner side (towards the heading tape), away from the curved screen edge (user review, S3).
+    lv_obj_set_style_text_align(l, align == LV_ALIGN_TOP_LEFT ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT, 0);
     return l;
 }
 
@@ -53,7 +54,7 @@ void PfdPage::onCreate(lv_obj_t* scr)
     corner(scr, L.local, "LOCAL", &local_);
     // Placeholders filled by the flight recorder (slice S6, FR-017).
     smallLabel(scr, L.maxg, "MAX G\n--", LV_ALIGN_TOP_LEFT);
-    smallLabel(scr, L.nm, "FLIGHT NM\n--", LV_ALIGN_TOP_RIGHT);
+    smallLabel(scr, L.nm, "FLT NM\n--", LV_ALIGN_TOP_RIGHT);   // "FLIGHT NM" did not fit the box
     lv_display_add_event_cb(lv_display_get_default(), renderReadyCb, LV_EVENT_RENDER_READY, this);
 }
 

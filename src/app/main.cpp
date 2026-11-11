@@ -9,6 +9,7 @@
 #include "pages/PfdPage.h"
 #include "pages/PlaceholderPage.h"
 #include "pages/SettingsPage.h"
+#include "pages/WxPage.h"
 #include "services/AttitudeService.h"
 #include "services/BoardCommands.h"
 #include "services/NetService.h"
@@ -20,6 +21,7 @@
 #include "services/SettingsStore.h"
 #include "services/SvcTask.h"
 #include "services/TimeService.h"
+#include "services/WeatherService.h"
 #include "ui/CautionBanner.h"
 #include "ui/DebugOverlay.h"
 #include "ui/NetSetupOverlay.h"
@@ -37,7 +39,7 @@ static bool g_stable;
 static QueueHandle_t g_uiQueue;
 
 static PfdPage g_home;
-static PlaceholderPage g_pageA(PageId::PlaceholderA, "PAGE A");
+static WxPage g_wx;   // S3: replaces the "PAGE A" placeholder
 static PlaceholderPage g_pageB(PageId::PlaceholderB, "PAGE B");
 static SettingsPage g_settings;
 
@@ -188,13 +190,15 @@ void setup()
     SvcTask::addTick(PowerService::tick);
     SvcTask::addTick(TimeService::tick);
     SvcTask::addTick(AttitudeService::tick);
+    WeatherService::begin();             // S3: before NetService (TLS allocator before Wi-Fi is first used)
+    SvcTask::addTick(WeatherService::tick);
     NetService::begin();                 // after PowerService (Rail::Wifi hook) and TimeService
     SvcTask::addTick(NetService::tick);
     SvcTask::begin();
 
     g_uiQueue = EventBus::subscribe(16);
     PageManager::registerPage(&g_home);
-    PageManager::registerPage(&g_pageA);
+    PageManager::registerPage(&g_wx);
     PageManager::registerPage(&g_pageB);
     PageManager::registerPage(&g_settings);
     PageManager::onFirstHome(onFirstHome);
