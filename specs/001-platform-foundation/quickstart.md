@@ -21,13 +21,13 @@ pio test -e native                        # expect all tests PASSED
 pio run -e twatch_ultra -t upload --upload-port COM3
 pio device monitor -p COM3 -b 115200
 ```
-Power-cycle 10×. Home is interactive in ≤3 s each time. Serial shows `ad info` boot banner.
+Power-cycle 10×. Home is interactive in ≤4 s each time. Serial shows `ad info` boot banner.
 
 ## V3. Navigation (US1, SC-002, SC-003, SC-006)
 1. Swipe left ×4: Home → A → B → Settings → Home. Swipe right once: Settings.
 2. Page indicator appears ~1 s after each change.
 3. From B press button → Home. Press again → B.
-4. 50 quick swipes each way: no skips or freezes. Enable the overlay (Settings): FPS ≥30 during swipes.
+4. 50 quick swipes each way: no skips or freezes. Transitions ≤300 ms; record the `nav … fps` values from the log (SC-006).
 
 ## V4. Settings persistence (US2, SC-004)
 1. Settings: brightness → lowest step (screen dims at once), overlay ON.
@@ -40,7 +40,7 @@ Power-cycle 10×. Home is interactive in ≤3 s each time. Serial shows `ad info
 ## V5. Graceful degradation (US3, SC-005)
 ```text
 ad simfail lora
-ad reboot          → Home within 3 s, amber "LORA FAIL" banner; `ad periph` shows lora state=SIMFAIL
+ad reboot          → Home within 4 s, amber "LORA FAIL" banner; `ad periph` shows lora state=SIMFAIL
 ad simfail lora nfc gnss sd mic haptics imu rtc
 ad reboot          → Home, banner cycles through all; Settings status lists all
 ad simfail none

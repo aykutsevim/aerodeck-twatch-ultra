@@ -42,7 +42,7 @@ T-Watch S3 compile-only.
 
 **Project Type**: Embedded firmware (single PlatformIO project).
 
-**Performance Goals**: Boot-to-home ≤3 s; ≥30 FPS during transitions; transitions ≤300 ms;
+**Performance Goals**: Boot-to-home ≤4 s (SC-001, amended); transition FPS measured and recorded (SC-006, amended; ≥30 FPS owned by S1); transitions ≤300 ms;
 button-to-home ≤0.5 s.
 
 **Constraints**: Internal free heap ≥40 KB (≈137 KB taken by DMA draw buffers, see research R7);

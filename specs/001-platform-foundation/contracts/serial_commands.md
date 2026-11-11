@@ -18,6 +18,10 @@ Commands are parsed on the `svc` task and never block the UI.
 | `ad log <error\|warn\|info\|debug>` | Set log level (persisted) | `OK` |
 | `ad reboot` | Restart | `OK` then restart |
 | `ad stat` | One-shot diagnostic snapshot | `OK` + `fps=.. heap=.. heapmin=.. psram=..` |
+| `ad nav <next\|prev\|button>` | Test hook: same navigation as a swipe left/right or button press (posted to the UI task) | `OK` (the `nav` log line reports the timing) |
+
+Added during implementation: `ad nav` (automates quickstart V3 timing). `ad periph` may also report
+`PENDING` for peripherals probed after Home is shown (deferred probe, FR-001).
 
 Log line format (all output not part of a reply):
 `[<uptime_ms>][<E|W|I|D>][<tag>] <message>`. Secret setting values never appear in any output.

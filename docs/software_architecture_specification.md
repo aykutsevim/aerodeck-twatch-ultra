@@ -141,9 +141,9 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `SettingsStore` | NVS namespace `aerodeck` | Schema version, theme/NVG, TZ, Wi-Fi SSID/PSK, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
 | Recorder | NVS `rec` (hourly) + `RTC_DATA_ATTR` (on sleep) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
-| Assets | LittleFS partition `/audio/*.wav` (16-bit PCM, mono, 16 kHz) | chime, master_caution, pull_up, bingo_fuel, minimums, traffic |
+| Assets | FAT partition `ffat` (mounted and USB-exposed by LilyGoLib, ADR-009) `/audio/*.wav` (16-bit PCM, mono, 16 kHz) | chime, master_caution, pull_up, bingo_fuel, minimums, traffic |
 
-The partition table shall be project-owned (`partitions/aerodeck_16MB.csv`): app OTA-ready ×2 + LittleFS ≥2 MB. It must not keep pointing into `libdeps/.../factory/partitions.csv`.
+The partition table is project-owned (`partitions/aerodeck_16MB.csv`, ADR-009): nvs 20 KB, otadata, app0/app1 4 MB each, ffat ≈7.9 MB, coredump 64 KB. It must not point into `libdeps/`.
 
 ### 7.2 AeroDeck LoRa beacon v1 (binary, little-endian, ≤24 B)
 | Offset | Size | Field |
@@ -171,8 +171,9 @@ Default radio profile: EU868 869.525 MHz, SF9, BW125, CR4/5, 14 dBm. US915 profi
 - **NVG:** Theme swaps every palette token to green-on-black and sends `NvgChanged`. Pages restyle through shared `lv_style_t` objects, so they need no per-widget code.
 
 ## 9. Build & configuration
-- Environments: `twatch_ultra` (primary), `twatchs3` (secondary, must compile), `native` (unit tests of `src/core/`).
-- **LilyGoLib patch:** S0 shall make the IDF-4.4 display-guard fix reproducible. In order of preference: (a) a PlatformIO `extra_scripts = pre:tools/patch_lilygolib.py` that idempotently rewrites the guard in `libdeps` before compilation; (b) vendor a patched copy under `lib/`; (c) a forked Git URL. S0 records the choice as an ADR and verifies it from a clean `.pio`.
+- Environments: `twatch_ultra` (primary), `twatchs3` (secondary, must compile), `native` (Unity tests of `src/core/` only: `build_src_filter = +<core/>`, `test_build_src = yes`; needs a host GCC, MinGW-w64 on Windows).
+- **LilyGoLib patch (ADR-008):** `extra_scripts` runs `post:tools/patch_lilygolib.py`, which idempotently rewrites the IDF-4.4 display guard after `lib_deps` are installed and before compilation. A `pre:` script would run before the library exists on a clean checkout. A separate `pre:tools/fw_version.py` injects `AD_FW_VERSION` from `git describe`.
+- **Dependency pinning (constitution VII):** every `lib_deps` entry is an exact version, and Git URLs are pinned to a commit SHA.
 - `src_dir = src`. App sources under `src/{board,core,services,ui,pages,app}`.
 - Compile-time feature flags (`-D AD_FEATURE_TCAS=1` …) let you exclude whole slices for size or debug builds.
 
@@ -184,7 +185,7 @@ src/
   services/   *Service.{h,cpp}, EventBus, Snapshot<T>
   ui/         PageManager, Theme, widgets/
   pages/      PfdPage, WxPage, RecorderPage, ChronoPage, TcasPage, PttPage, IffPage, GpsPage, SettingsPage
-data/audio/   *.wav  (uploaded with `pio run -t uploadfs`)
+(assets)      /audio/*.wav on the FAT partition: copy over USB mass storage (ADR-009)
 test/         test_core_*/  (Unity, env:native)
 tools/        patch_lilygolib.py, gen_fonts.sh
 ```
@@ -208,5 +209,7 @@ Each slice's spec-kit `tasks.md` shall include its acceptance scenarios as on-de
 | ADR-005 | 30 FPS guaranteed, 60 FPS aspirational. | A 502×410 QSPI panel makes full-frame 60 FPS unproven (SRS OI-2). |
 | ADR-006 | Default LoRa region EU868. | The user's locale (LTAC, Türkiye). US915 is selectable. |
 | ADR-007 | Default METAR source is aviationweather.gov (no key). | No account needed. CheckWX is optional. |
+| ADR-008 | LilyGoLib IDF-4.4 fix applied by a `post:` extra script (`docs/adr/008-…`). | `pre:` runs before `lib_deps` install on a clean checkout (verified in PlatformIO source). |
+| ADR-009 | Assets on LilyGoLib's FAT `ffat` partition, not LittleFS (`docs/adr/009-…`). | LilyGoLib already mounts FAT and exposes it over USB. |
 
 New ADRs are appended in `docs/adr/NNN-title.md` by the slice that makes the decision.
