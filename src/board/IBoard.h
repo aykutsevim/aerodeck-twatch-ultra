@@ -1,11 +1,18 @@
 // AeroDeck board HAL. The only layer allowed to touch LilyGoLib/driver types (Principle II).
 // Contract: specs/001-platform-foundation/contracts/internal_interfaces.md
 #pragma once
+#include <ctime>
 #include "core/BootGuard.h"
 #include "core/Types.h"
 
+struct GravitySample {
+    float x, y, z;   // gravity in the sensor frame (after LilyGoLib's axis remap); only ratios matter in S1
+    uint32_t ms;     // millis() when the sample was received
+};
+
 class IBoard {
 public:
+    using GravityCb = void (*)(const GravitySample& s, void* ctx);
     using ButtonCb = void (*)(void* ctx);
     using StageCb = void (*)(core::BootStage stage);
 
@@ -27,6 +34,11 @@ public:
     // Probes slow peripherals skipped by begin() to meet the boot target (FR-001, ≤4 s).
     // Blocking (BHI260AP firmware upload ~2 s); call from a background task on core 0.
     virtual void probeDeferred() = 0;
+    // S1: BHI260AP gravity virtual sensor. The callback runs on the UI task inside loop() (I2C lock held).
+    // Returns false if the IMU is not Ok or the board has no fusion sensor.
+    virtual bool configureAttitude(float rateHz, GravityCb cb, void* ctx) = 0;
+    virtual bool readRtc(std::tm& utc, bool& integrity) = 0;   // RTC holds UTC
+    virtual bool writeRtc(const std::tm& utc) = 0;
     virtual ~IBoard() = default;
 };
 

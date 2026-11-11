@@ -87,7 +87,7 @@ IBoard& board();   // selected at compile time by ARDUINO_T_WATCH_S3_ULTRA / ARD
 | Task | Core | Prio | Period / trigger | Responsibility |
 | :--- | :---: | :---: | :--- | :--- |
 | `ui` (Arduino `loop`) | 1 | 1 | ~5 ms loop | `lv_timer_handler()`, drain UI event queue, apply snapshots |
-| `attitude` | 1 | 3 | 100 Hz | Read IMU, complementary filter → pitch/roll, peak-g, publish `AttitudeSnapshot` |
+| ~~`attitude`~~ | – | – | – | **Superseded by ADR-010:** the BHI260AP gravity virtual sensor (100 Hz, on-chip fusion) is delivered via LilyGoLib's event loop on the `ui` task; `AttitudeService` computes pitch/roll/LOCK and publishes `AttitudeSnapshot` |
 | `svc` | 0 | 2 | 50 ms tick + queue | Cooperative tick for Power, Time, Alert, Chrono, Recorder, Haptic |
 | `net` | 0 | 1 | on demand | Wi-Fi up → NTP → METAR → Wi-Fi down |
 | `radio` | 0 | 4 | DIO1 IRQ + timers | RadioLib RX/TX, beacons, duty-cycle accounting |
@@ -163,8 +163,8 @@ Default radio profile: EU868 869.525 MHz, SF9, BW125, CR4/5, 14 dBm. US915 profi
 `ring = clamp((rssi_ref − rssi) / step, 0, N−1)` with `rssi_ref = −40 dBm`, `step = 15 dB`, `N = 4`. Smooth with an EMA (α=0.3). The bearing is a stable hash of the node ID unless a GNSS position exists.
 
 ## 8. UI architecture
-- **Resolution independence:** `Theme::scale = min(w,h)/240.0`. All sizes go through `S(px)`. Layout uses LVGL flex/grid and `lv_pct`. Ultra 502×410 is landscape: the PFD uses a centred square ADI with tapes in the side margins.
-- **Horizon rendering:** prefer two layered `lv_obj` rectangles (sky/ground) in a clipping container, transformed with `lv_obj_set_style_transform_rotation/pivot` and translated for pitch. Fall back to an `lv_canvas` in PSRAM if transform cost exceeds budget (measure in S1; record the result in an ADR).
+- **Resolution independence:** `Theme::scale = min(w,h)/240.0`. All sizes go through `S(px)`. Layout uses LVGL flex/grid and `lv_pct`. The Ultra is **portrait, 410×502** (LilyGoLib rotation 0): the PFD stacks heading tape, hour tape | ADI | minute tape, EICAS and a ZULU/LOCAL row (`core::PfdLayout`). Landscape and square screens use a side-by-side arrangement. Board code must report the *rotated* size (`instance.width()/height()`), not the variant's pre-rotation `DISP_WIDTH/DISP_HEIGHT`, plus the screen's corner radius (`DisplayInfo.cornerR`, Ultra 64 px). Layouts keep content inside the rounded corners (`core::insideRounded`), and overlays avoid corner anchoring.
+- **Horizon rendering (ADR-011):** one custom-drawn `lv_obj` (`LV_EVENT_DRAW_MAIN`: sky background, ground as a triangle fan clipped to the square, pitch ladder ±20°, fixed symbol). No transforms. Invalidated only on a ≥0.2° change. The instrument is capped at ≈238 px and the heading tape steps in 1° increments, to hold ≥30 FPS through LilyGoLib's 1/6-screen DMA pipeline (measurements in ADR-011).
 - **Tapes:** custom widget = clipped container with pre-rendered tick labels, scrolled by `translate_y` (no relayout per frame).
 - **Buffers:** LVGL draw buffers in PSRAM, partial refresh, DMA enabled via `setDisplayParams(true, …)`. Invalidate only changed regions.
 - **Fonts:** a HUD 7-segment style font (open licence, converted with `lv_font_conv`) at 2–3 sizes plus Montserrat for text.
@@ -206,10 +206,12 @@ Each slice's spec-kit `tasks.md` shall include its acceptance scenarios as on-de
 | ADR-002 | LVGL 9.x (not 8.3 as in the concept spec). | Already pinned in the project and supported by LilyGoLib 0.2.0. |
 | ADR-003 | Stay on Arduino-ESP32 2.0.17 / IDF 4.4 for now and patch LilyGoLib. | Proven build. A migration to 3.x is deferred (SRS OI-5). |
 | ADR-004 | Only the UI task touches LVGL. Snapshots + EventBus for everything else. | Avoids LVGL locking bugs and protects frame time. |
-| ADR-005 | 30 FPS guaranteed, 60 FPS aspirational. | A 502×410 QSPI panel makes full-frame 60 FPS unproven (SRS OI-2). |
+| ADR-005 | 30 FPS guaranteed, 60 FPS aspirational. | A 410×502 QSPI panel makes full-frame 60 FPS unproven (SRS OI-2). |
 | ADR-006 | Default LoRa region EU868. | The user's locale (LTAC, Türkiye). US915 is selectable. |
 | ADR-007 | Default METAR source is aviationweather.gov (no key). | No account needed. CheckWX is optional. |
 | ADR-008 | LilyGoLib IDF-4.4 fix applied by a `post:` extra script (`docs/adr/008-…`). | `pre:` runs before `lib_deps` install on a clean checkout (verified in PlatformIO source). |
 | ADR-009 | Assets on LilyGoLib's FAT `ffat` partition, not LittleFS (`docs/adr/009-…`). | LilyGoLib already mounts FAT and exposes it over USB. |
+| ADR-010 | Attitude from the BHI260AP gravity virtual sensor on the UI task; no attitude task (`docs/adr/010-…`). | On-chip fusion, 100 Hz, measured latency ≤44 ms. |
+| ADR-011 | Custom-drawn horizon, ≈238 px cap, 1° heading steps (`docs/adr/011-…`). | Pipeline ceiling ~34 FPS at 280 px; median 30 FPS achieved. |
 
 New ADRs are appended in `docs/adr/NNN-title.md` by the slice that makes the decision.

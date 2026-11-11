@@ -7,6 +7,10 @@ struct PowerSnapshot {
     core::PmuReading pmu;
     bool valid;
     uint32_t atMs;
+    float fuelFlowPctPerH;   // S1: estimated drain rate, NaN = unavailable (core::FuelFlow)
+    bool lowFuel;            // S1: LOW FUEL hysteresis (core::FuelState)
+    uint8_t flowSamples;
+    uint32_t seq;
 };
 
 class RailLease {
@@ -30,4 +34,5 @@ uint8_t refcount(core::Rail r);
 // Re-applies OFF to every optional rail with no lease (e.g. after vendor init powered them).
 void enforceIdleRails();
 void tick(uint32_t nowMs);
+void registerCommands();   // `ad fuel`, `ad fuel sim`
 } // namespace PowerService

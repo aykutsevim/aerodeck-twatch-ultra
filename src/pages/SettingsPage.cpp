@@ -53,6 +53,12 @@ void brightStep(lv_event_t* e)
     SettingsStore::set(SettingKey::Bright, v);   // out-of-range is rejected by the store
 }
 
+void tzStep(lv_event_t* e)
+{
+    int delta = int(intptr_t(lv_event_get_user_data(e)));
+    SettingsStore::set(SettingKey::TzOff, SettingsStore::get(SettingKey::TzOff) + delta * 30);   // range-checked
+}
+
 void overlayChanged(lv_event_t* e)
 {
     lv_obj_t* sw = lv_event_get_target_obj(e);
@@ -136,6 +142,18 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_add_event_cb(logDd_, logChanged, LV_EVENT_VALUE_CHANGED, nullptr);
     noSwipe(logDd_);
 
+    r = row(col, "Local offset");
+    lv_obj_t* tzCtl = lv_obj_create(r);
+    lv_obj_remove_style_all(tzCtl);
+    lv_obj_set_size(tzCtl, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(tzCtl, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(tzCtl, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(tzCtl, Theme::S(8), 0);
+    smallButton(tzCtl, LV_SYMBOL_MINUS, tzStep, reinterpret_cast<void*>(intptr_t(-1)));
+    tzVal_ = lv_label_create(tzCtl);
+    lv_obj_add_style(tzVal_, Theme::body(), 0);
+    smallButton(tzCtl, LV_SYMBOL_PLUS, tzStep, reinterpret_cast<void*>(intptr_t(1)));
+
     lv_obj_t* rb = lv_button_create(col);
     lv_obj_add_style(rb, Theme::button(), 0);
     lv_obj_set_width(rb, lv_pct(100));
@@ -178,6 +196,9 @@ void SettingsPage::refresh()
         lv_obj_remove_state(overlaySw_, LV_STATE_CHECKED);
     }
     lv_dropdown_set_selected(logDd_, uint32_t(SettingsStore::get(SettingKey::LogLvl)));
+    int32_t tz = SettingsStore::get(SettingKey::TzOff);
+    int32_t atz = tz < 0 ? -tz : tz;
+    lv_label_set_text_fmt(tzVal_, "UTC%c%02ld:%02ld", tz < 0 ? '-' : '+', (long)(atz / 60), (long)(atz % 60));
 
     for (uint8_t i = 0; i < uint8_t(core::Periph::Count); i++) {
         lv_obj_t* l = lv_obj_get_child(statusBox_, i);

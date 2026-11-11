@@ -1,6 +1,6 @@
 # AeroDeck: glass-cockpit firmware for the LilyGO T-Watch Ultra
 
-AeroDeck turns the LilyGO **T-Watch Ultra** (ESP32-S3, 502×410 AMOLED) into an aviation-style watch:
+AeroDeck turns the LilyGO **T-Watch Ultra** (ESP32-S3, 410×502 portrait AMOLED with 64 px rounded corners) into an aviation-style watch:
 a Primary Flight Display watch face and swipeable Multi-Function Display pages, each putting one onboard
 peripheral to work (IMU horizon, PMU "engine" gauges, LoRa TCAS radar, haptic stick shaker, GPWS voice…).
 The T-Watch S3 is a secondary, compile-only target.
@@ -16,8 +16,14 @@ Development follows [spec-kit](https://github.com/github/spec-kit) in feature sl
 | [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | Non-negotiable project principles |
 | [`specs/`](specs/) | Per-slice spec, plan, tasks and validation records |
 
-**Current state:** slice S0, platform foundation. It has a page ring, settings, cautions, diagnostics
-and boot-loop protection. Home is a placeholder until S1 (PFD watch face).
+**Current state:** slice S1. The home page is the **Primary Flight Display**:
+- an artificial horizon driven by the BHI260AP's on-chip fusion, with LOCK when level;
+- hour and minute tapes, plus a heading tape that turns the seconds into compass degrees (1 s = 6°);
+- ZULU (UTC) and LOCAL time;
+- an EICAS strip: FUEL QTY (battery %), FUEL FLOW (drain %/h), EGT (power-chip °C) and a CHG annunciator;
+- a LOW FUEL caution.
+
+It sits on the S0 platform: page ring, settings, cautions, diagnostics and boot-loop protection.
 
 ## Build & flash
 
@@ -49,12 +55,17 @@ pio test -e native
 This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSYS2 then
 `pacman -S mingw-w64-ucrt-x86_64-gcc` and add `C:\msys64\ucrt64\bin` to `PATH`. Check with `gcc --version`.
 
-## Using the watch (S0)
+## Using the watch
 
-- **Swipe left/right** to move through the page ring: Home → Page A → Page B → Settings → Home.
+- **First use:** set the clock (until S2 adds network time). The watch keeps **UTC**; local time = UTC + the
+  "Local offset" setting (default +3:00):
+  `ad time set 2026-11-11T09:24:00Z` (current UTC). Until then the PFD shows `--` and a CLOCK NOT SET caution.
+- **Swipe left/right** to move through the page ring: PFD → Page A → Page B → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
-- **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, restore defaults, and
-  firmware/peripheral status.
+- **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
+  restore defaults, and firmware/peripheral status.
+- **Horizon flags:** ATT ALIGN for the first ~3 s after boot (motion sensor starting), ATT FAIL if motion sensing
+  is unavailable (the clock and gauges keep working).
 - An **amber banner** names any peripheral that failed to start. The watch keeps working without it.
 
 ## Serial console (`ad …`)
@@ -71,9 +82,14 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad log <error\|warn\|info\|debug>` | Diagnostic level (persisted) |
 | `ad stat` | FPS and free heap/PSRAM |
 | `ad nav <next\|prev\|button>` | Test hook: navigate as if swiping or pressing the button |
+| `ad time` · `ad time set <YYYY-MM-DDTHH:MM:SSZ>` | Show / set the UTC clock (kept in the RTC) |
+| `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
+| `ad att sweep <on\|off>` | Test hook: synthetic horizon motion for FPS measurement |
+| `ad fuel` · `ad fuel sim <pct\|off>` | EICAS values · test hook overriding battery % (LOW FUEL testing) |
 | `ad reboot` | Restart |
 
-Full contract: [`specs/001-platform-foundation/contracts/serial_commands.md`](specs/001-platform-foundation/contracts/serial_commands.md).
+Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md) ·
+[S1 additions](specs/002-pfd-watch-face/contracts/serial_commands.md).
 
 ## Project layout
 
@@ -88,6 +104,11 @@ test/          Unity tests for src/core/
 tools/         build scripts (LilyGoLib patch, firmware version)
 partitions/    project-owned partition table
 ```
+
+## Fonts
+
+HUD digits use **DSEG7 Classic Bold** by keshikan (SIL Open Font License 1.1, `src/ui/fonts/OFL.txt`), converted
+with `lv_font_conv`; see [`tools/gen_fonts.md`](tools/gen_fonts.md).
 
 ## Credits
 

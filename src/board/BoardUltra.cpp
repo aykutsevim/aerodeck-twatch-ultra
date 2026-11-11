@@ -8,6 +8,7 @@
 #include "board/IBoard.h"
 #include "board/I2cLock.h"
 #include "core/SimFail.h"
+#include <bosch/bhy2_parse.h>
 
 using namespace core;
 
@@ -88,6 +89,45 @@ public:
 
     void onStage(StageCb cb) override { stageCb_ = cb; }
 
+    bool configureAttitude(float rateHz, GravityCb cb, void* ctx) override
+    {
+        if (periph(Periph::Imu) != PeriphState::Ok) {
+            return false;
+        }
+        gravityCb_ = cb;
+        gravityCtx_ = ctx;
+        I2cLock lock;
+        gravityScale_ = instance.sensor.getScaling(BHY2_SENSOR_ID_GRA);
+        if (!(gravityScale_ > 0.0f)) {
+            gravityScale_ = 1.0f / 4096.0f;   // S1 only needs axis ratios; S6 must confirm the absolute scale
+        }
+        bool ok = instance.sensor.onResultEvent(SensorBHI260AP::GRAVITY_VECTOR, &BoardUltra::onGravity, this);
+        ok = ok && instance.sensor.configure(BHY2_SENSOR_ID_GRA, rateHz, 0);
+        return ok;
+    }
+
+    bool readRtc(std::tm& utc, bool& integrity) override
+    {
+        if (periph(Periph::Rtc) != PeriphState::Ok) {
+            return false;
+        }
+        I2cLock lock;
+        RTC_DateTime d = instance.rtc.getDateTime();
+        utc = d.toUnixTime();
+        integrity = instance.rtc.isClockIntegrityGuaranteed();
+        return true;
+    }
+
+    bool writeRtc(const std::tm& utc) override
+    {
+        if (periph(Periph::Rtc) != PeriphState::Ok) {
+            return false;
+        }
+        I2cLock lock;
+        instance.rtc.setDateTime(RTC_DateTime(utc));
+        return true;
+    }
+
     void probeDeferred() override
     {
         for (const Deferred& d : kDeferred) {
@@ -142,7 +182,10 @@ public:
 
     DisplayInfo display() const override
     {
-        return DisplayInfo{uint16_t(DISP_WIDTH), uint16_t(DISP_HEIGHT), false};
+        // Rotated size as LVGL sees it. DISP_WIDTH/DISP_HEIGHT (502×410) describe the panel before rotation;
+        // LilyGoLib's default rotation 0 is portrait, i.e. 410 wide × 502 tall.
+        // The Ultra AMOLED has rounded corners with a 64 px radius.
+        return DisplayInfo{instance.width(), instance.height(), false, 64};
     }
 
     void setBrightnessPct(uint8_t pct) override
@@ -264,6 +307,19 @@ private:
         return f;
     }
 
+    // SensorDataParseCallback; runs inside instance.sensor.update() on the UI task. Keep it short.
+    static void onGravity(uint8_t, uint8_t* data, uint32_t size, uint64_t*, void* user)
+    {
+        auto* self = static_cast<BoardUltra*>(user);
+        if (!self->gravityCb_ || size < 6) {
+            return;
+        }
+        bhy2_data_xyz v;
+        bhy2_parse_xyz(data, &v);
+        GravitySample s{v.x * self->gravityScale_, v.y * self->gravityScale_, v.z * self->gravityScale_, millis()};
+        self->gravityCb_(s, self->gravityCtx_);
+    }
+
     static void onDeviceEvent(DeviceEvent_t event, void* params, void* user)
     {
         auto* self = static_cast<BoardUltra*>(user);
@@ -302,6 +358,9 @@ private:
     bool displayOk_ = false;
     bool lvgl_ = false;
     StageCb stageCb_ = nullptr;
+    GravityCb gravityCb_ = nullptr;
+    void* gravityCtx_ = nullptr;
+    float gravityScale_ = 1.0f / 4096.0f;
     ButtonCb buttonCb_ = nullptr;
     void* buttonCtx_ = nullptr;
 };

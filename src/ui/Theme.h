@@ -10,6 +10,7 @@ float scale();
 inline int32_t S(int32_t px) { return int32_t(px * scale() + 0.5f); }
 int32_t width();
 int32_t height();
+int32_t cornerRadius();   // screen corner radius in px (0 = square corners)
 
 // Palette tokens
 lv_color_t bg();

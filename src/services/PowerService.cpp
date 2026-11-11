@@ -4,7 +4,13 @@
 #include <freertos/semphr.h>
 #include "board/IBoard.h"
 #include "services/EventBus.h"
+#include "services/Cautions.h"
 #include "services/Log.h"
+#include "services/SerialConsole.h"
+#include "core/Fuel.h"
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 using core::Rail;
 
@@ -12,6 +18,10 @@ static uint8_t s_ref[size_t(Rail::Count)];
 static SemaphoreHandle_t s_mutex;
 static Snapshot<PowerSnapshot> s_snap;
 static uint32_t s_lastPollMs;
+static core::FuelFlow s_flow;
+static core::FuelState s_fuelState;
+static volatile int s_simPct = -1;   // `ad fuel sim` override, -1 = off
+static uint32_t s_seq;
 
 static const char* railName(Rail r)
 {
@@ -109,8 +119,65 @@ void tick(uint32_t nowMs)
     PowerSnapshot p{};
     p.valid = board().readPmu(p.pmu);
     p.atMs = nowMs;
+    if (p.valid && s_simPct >= 0) {
+        p.pmu.battPct = uint8_t(s_simPct);
+    }
+    p.fuelFlowPctPerH = NAN;
+    if (p.valid) {
+        s_flow.addSample(nowMs / 60000, p.pmu.battPct, p.pmu.charging);
+        p.fuelFlowPctPerH = s_flow.ratePctPerH();
+        bool wasLow = s_fuelState.low();
+        p.lowFuel = s_fuelState.update(p.pmu.battPct, p.pmu.charging);
+        if (p.lowFuel && !wasLow) {
+            Cautions::raise(CautionId::LowFuel, "LOW FUEL");
+        } else if (!p.lowFuel && wasLow) {
+            Cautions::clear(CautionId::LowFuel);
+        }
+    }
+    p.flowSamples = uint8_t(s_flow.count());
+    p.seq = ++s_seq;
     s_snap.write(p);
     EventBus::publish(EventType::PowerSnapshotUpdated);
+}
+
+static void cmdFuel(int, const char* const*, core::Reply& r)
+{
+    PowerSnapshot p = s_snap.read();
+    char flow[16];
+    if (std::isnan(p.fuelFlowPctPerH)) {
+        snprintf(flow, sizeof flow, "--");
+    } else {
+        snprintf(flow, sizeof flow, "%.1f", p.fuelFlowPctPerH);
+    }
+    char b[128];
+    snprintf(b, sizeof b, "pct=%u chg=%d temp_c=%.1f flow_pph=%s low=%d samples=%u sim=%d valid=%d", p.pmu.battPct,
+             p.pmu.charging ? 1 : 0, p.pmu.dieTempC10 / 10.0f, flow, p.lowFuel ? 1 : 0, p.flowSamples, s_simPct,
+             p.valid ? 1 : 0);
+    r.ok();
+    r.line(b);
+}
+
+static void cmdFuelSim(int, const char* const* argv, core::Reply& r)
+{
+    if (strcmp(argv[0], "off") == 0) {
+        s_simPct = -1;
+        r.ok();
+        return;
+    }
+    char* end = nullptr;
+    long v = strtol(argv[0], &end, 10);
+    if (!end || *end != '\0' || v < 0 || v > 100) {
+        r.err("expected 0..100|off");
+        return;
+    }
+    s_simPct = int(v);
+    r.ok();
+}
+
+void registerCommands()
+{
+    SerialConsole::add("fuel sim", 1, cmdFuelSim);
+    SerialConsole::add("fuel", 0, cmdFuel);
 }
 
 } // namespace PowerService

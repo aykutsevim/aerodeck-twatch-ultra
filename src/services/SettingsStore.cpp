@@ -93,6 +93,10 @@ BootStatus begin()
         int32_t v = 0;
         bool has = readKey(p, d, v);
         s_cache[i] = sanitizeSetting(SettingKey(i), v, has);
+        if (!has && status == BootStatus::Migrated) {
+            writeKey(p, d, s_cache[i]);   // key added by the new schema: persist its default
+            LOGI("set", "migration added '%s'", d.key);
+        }
         if (has && s_cache[i] != v) {
             LOGW("set", "setting '%s' out of range; using default", d.key);   // key only, never value
         }
@@ -210,7 +214,11 @@ static void cmdSet(int, const char* const* argv, core::Reply& r)
     const SettingDef& d = settingDef(SettingKey(k));
     char msg[48];
     if (!end || *end != '\0') {
-        snprintf(msg, sizeof msg, "out of range [%ld..%ld]", (long)d.min, (long)d.max);
+        if (d.step > 0) {
+            snprintf(msg, sizeof msg, "out of range [%ld..%ld step %ld]", (long)d.min, (long)d.max, (long)d.step);
+        } else {
+            snprintf(msg, sizeof msg, "out of range [%ld..%ld]", (long)d.min, (long)d.max);
+        }
         r.err(msg);
         return;
     }
@@ -218,7 +226,11 @@ static void cmdSet(int, const char* const* argv, core::Reply& r)
     case SetResult::Ok: r.ok(); break;
     case SetResult::NotEditable: r.err("not editable"); break;
     case SetResult::OutOfRange:
-        snprintf(msg, sizeof msg, "out of range [%ld..%ld]", (long)d.min, (long)d.max);
+        if (d.step > 0) {
+            snprintf(msg, sizeof msg, "out of range [%ld..%ld step %ld]", (long)d.min, (long)d.max, (long)d.step);
+        } else {
+            snprintf(msg, sizeof msg, "out of range [%ld..%ld]", (long)d.min, (long)d.max);
+        }
         r.err(msg);
         break;
     }

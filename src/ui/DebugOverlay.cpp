@@ -35,7 +35,7 @@ static void sampleCb(lv_timer_t*)
     d.psramFree = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     s_diag.write(d);
     if (s_label && !lv_obj_has_flag(s_label, LV_OBJ_FLAG_HIDDEN)) {
-        lv_label_set_text_fmt(s_label, "%u fps  heap %luK (min %luK)  psram %luK", d.fps,
+        lv_label_set_text_fmt(s_label, "%u fps  heap %lu/%luK  ps %luK", d.fps,
                               (unsigned long)(d.heapFree / 1024), (unsigned long)(d.heapMin / 1024),
                               (unsigned long)(d.psramFree / 1024));
     }
@@ -50,7 +50,8 @@ void begin()
     lv_obj_set_style_text_color(s_label, Theme::hudGreen(), 0);
     lv_obj_set_style_text_font(s_label, Theme::fontSmall(), 0);
     lv_obj_set_style_pad_all(s_label, Theme::S(2), 0);
-    lv_obj_align(s_label, LV_ALIGN_BOTTOM_LEFT, Theme::S(2), -Theme::S(2));
+    // Bottom centre: the screen's rounded corners would clip a corner-anchored label.
+    lv_obj_align(s_label, LV_ALIGN_BOTTOM_MID, 0, -Theme::S(2));
     lv_obj_remove_flag(s_label, LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text(s_label, "-- fps");
     lv_timer_create(sampleCb, 1000, nullptr);

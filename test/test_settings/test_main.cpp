@@ -79,11 +79,41 @@ static void test_find_key()
 static void test_format_masks_secret()
 {
     char out[16];
-    SettingDef secret{"wifipsk", SettingType::U16, 0, 0, 999, true, true};
+    SettingDef secret{"wifipsk", SettingType::U16, 0, 0, 999, 0, true, true};
     formatSettingForOutput(secret, 123, out, sizeof out);
     TEST_ASSERT_EQUAL_STRING("***", out);
     formatSettingForOutput(settingDef(SettingKey::Bright), 2, out, sizeof out);
     TEST_ASSERT_EQUAL_STRING("2", out);
+}
+
+static void test_tzoff_s1()
+{
+    const SettingDef& t = settingDef(SettingKey::TzOff);
+    TEST_ASSERT_EQUAL_STRING("tzoff", t.key);
+    TEST_ASSERT_EQUAL(int(SettingType::I32), int(t.type));
+    TEST_ASSERT_EQUAL(180, t.def);
+    TEST_ASSERT_EQUAL(-720, t.min);
+    TEST_ASSERT_EQUAL(840, t.max);
+    TEST_ASSERT_EQUAL(30, t.step);
+    TEST_ASSERT_TRUE(t.editable);
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::TzOff, 330));
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::TzOff, -720));
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::TzOff, 0));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::TzOff, 335));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::TzOff, -750));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::TzOff, 870));
+}
+
+static void test_schema_v2_migrates_v1()
+{
+    TEST_ASSERT_EQUAL(2, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(1, 2, true)));
+}
+
+static void test_s0_settings_have_no_step()
+{
+    TEST_ASSERT_EQUAL(0, settingDef(SettingKey::Bright).step);
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::Bright, 1));   // step 0 = any value in range
 }
 
 static void test_no_s0_setting_is_secret()
@@ -103,6 +133,9 @@ int main()
     RUN_TEST(test_schema_action);
     RUN_TEST(test_find_key);
     RUN_TEST(test_format_masks_secret);
+    RUN_TEST(test_tzoff_s1);
+    RUN_TEST(test_schema_v2_migrates_v1);
+    RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_no_s0_setting_is_secret);
     return UNITY_END();
 }

@@ -20,7 +20,12 @@ enum class Periph : uint8_t {
 };
 enum class PeriphState : uint8_t { Ok, Failed, Absent, SimulatedFail, Pending };
 
-struct DisplayInfo { uint16_t w; uint16_t h; bool round; };
+struct DisplayInfo {
+    uint16_t w;        // rotated width as LVGL sees it
+    uint16_t h;        // rotated height
+    bool round;        // fully round screen
+    uint16_t cornerR;  // radius of the screen's rounded corners in px (T-Watch Ultra: 64), 0 = square corners
+};
 
 // battmA is INT16_MIN when the PMU cannot measure battery current (AXP2101 has no such ADC).
 struct PmuReading {

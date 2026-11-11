@@ -1,32 +1,25 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (unversioned template) → 1.0.0
-Bump rationale: Initial ratification. All placeholders replaced with project-specific governance.
+Version change: 1.0.1 → 1.0.2
+Bump rationale: PATCH: factual hardware detail added to Technical Constraints; no rule changed.
+  - T-Watch Ultra screen corners are rounded with a 64 px radius (reported by the user in slice S1). UI layout
+    keeps content inside the visible area (existing Principle VII resolution-independence rule applies).
 
-Modified principles (template placeholder → new title):
-  [PRINCIPLE_1_NAME] → I. Every Slice Ships
-  [PRINCIPLE_2_NAME] → II. Layered Architecture Is Law
-  [PRINCIPLE_3_NAME] → III. Battery Is a Feature
-  [PRINCIPLE_4_NAME] → IV. Frame Time Is Sacred
-  [PRINCIPLE_5_NAME] → V. Test Off-Device First
-Added principles:
-  VI. Deliberate, Compliant, Private Actions
-  VII. Reproducible, Portable Builds
-  VIII. Simplicity & Explicit Experiments
-Added sections:
-  Technical Constraints (was [SECTION_2_NAME])
-  Development Workflow & Quality Gates (was [SECTION_3_NAME])
+Modified principles: none
+Modified sections:
+  Technical Constraints: Hardware (screen: 410×502 portrait, rounded corners r = 64 px)
+Added sections: none
 Removed sections: none
 
-Sources: docs/software_requirements_specification.md (AD-SRS-001),
-         docs/software_architecture_specification.md (AD-SAS-001),
-         docs/product_roadmap.md, docs/speckit_slice_prompts.md (Step 0)
-
 Templates reviewed (not modified, per command scope):
-  ✅ .specify/templates/plan-template.md — its "Constitution Check" gate reads this file at runtime
-  ✅ .specify/templates/spec-template.md — no conflict; specs must cite SRS IDs (Workflow §2)
-  ✅ .specify/templates/tasks-template.md — no conflict; on-device acceptance tasks required (V)
+  ✅ .specify/templates/plan-template.md: no conflict
+  ✅ .specify/templates/spec-template.md: no conflict
+  ✅ .specify/templates/tasks-template.md: no conflict
+
+History:
+  1.0.1 (2026-11-11): screen corrected to 410×502 portrait (LilyGoLib rotation 0); LVGL pin corrected to 9.6.0.
+  1.0.0 (2026-11-11): initial ratification (8 principles, Technical Constraints, Workflow & Quality Gates, Governance).
 
 Deferred TODOs: none
 -->
@@ -76,7 +69,7 @@ and keeps features independently replaceable.
 
 - No blocking I/O (network, filesystem, radio, audio, long I2C transactions) MAY run on the UI
   task. Such work MUST run in service tasks on core 0.
-- The PFD horizon MUST sustain ≥30 FPS on the T-Watch Ultra (502×410). 60 FPS is a goal and
+- The PFD horizon MUST sustain ≥30 FPS on the T-Watch Ultra (410×502 portrait). 60 FPS is a goal and
   MUST NOT be claimed without measurement.
 - Free internal heap MUST stay ≥40 KB in every state. LVGL draw buffers and large assets MUST
   live in PSRAM.
@@ -142,11 +135,11 @@ Portability keeps the S3 path open.
 ## Technical Constraints
 
 - **Hardware:** Primary target is the LilyGO T-Watch Ultra (ESP32-S3, 16 MB flash, 8 MB PSRAM,
-  502×410 AMOLED, BHI260AP, PCF85063A, AXP2101, DRV2605, MAX98357A, PDM mic, SX1262, GNSS,
+  410×502 portrait AMOLED with rounded corners (r = 64 px; 502×410 panel before LilyGoLib's default rotation), BHI260AP, PCF85063A, AXP2101, DRV2605, MAX98357A, PDM mic, SX1262, GNSS,
   ST25R3916 NFC). Secondary target is the T-Watch S3.
 - **Toolchain:** PlatformIO, `framework = arduino`, `platform = espressif32@6.12.0`
   (Arduino-ESP32 2.0.17 / ESP-IDF 4.4).
-- **Libraries:** LilyGoLib 0.2.0 (exact pin), LVGL 9.4, RadioLib 7.x, SensorLib 0.3.x,
+- **Libraries:** LilyGoLib 0.2.0 (exact pin), LVGL 9.6.0, RadioLib 7.x, SensorLib 0.3.x,
   XPowersLib 0.3.x, ESP8266Audio 2.0.0. The concept spec's LVGL 8.3 reference is superseded.
 - **Tasks:** UI + attitude on core 1. Network, radio, audio, microphone and service ticks on
   core 0 (AD-SAS-001 §5.1).
@@ -189,4 +182,4 @@ Portability keeps the S3 path open.
 - **Runtime guidance:** `docs/speckit_slice_prompts.md` provides per-slice prompts. AD-SAS-001
   provides design detail.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-11
+**Version**: 1.0.2 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-11

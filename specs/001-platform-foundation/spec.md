@@ -272,7 +272,7 @@ targets and run the off-device tests from scratch.
 
 ## Assumptions
 
-- The primary device is the T-Watch Ultra (502×410 screen). The T-Watch S3 only needs to compile in
+- The primary device is the T-Watch Ultra (410×502 portrait screen; *corrected in S1: earlier written as 502×410*). The T-Watch S3 only needs to compile in
   this slice; on-device S3 testing is out of scope.
 - The "physical button" is the watch's user-accessible side button. If a short press is reserved
   by hardware for power functions, the closest available press gesture is used, and the plan
