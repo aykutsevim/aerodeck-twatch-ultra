@@ -126,11 +126,12 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 3.4 METAR weather page (WX)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| FR-WX-001 | M | The system shall fetch the METAR for a configured ICAO station (default **LTAC**) at each hourly sync and on demand (a refresh control). |
+| FR-WX-001 | M | The system shall fetch the METAR for a configured ICAO station (default **LTAC**) at each hourly sync and on demand (a refresh control). *(S3: the scheduled fetch runs in the same Wi-Fi session as the time sync.)* |
 | FR-WX-002 | M | The WX page shall show: station, observation time (Z), wind direction (°) and speed (kt, gusts if present), visibility, QNH (hPa), temperature/dewpoint, and flight category (VFR/MVFR/IFR/LIFR, colour-coded). |
 | FR-WX-003 | M | The WX page shall show the raw METAR text. |
 | FR-WX-004 | M | Stale data (>90 min old) shall be marked STALE, and a fetch failure shall show the last good data with an error annunciator. |
 | FR-WX-005 | S | A wind arrow/compass graphic shall show wind direction relative to north. |
+| FR-WX-006 | M | The METAR station shall be selectable on the watch and over the diagnostic console, validated as a 4-letter ICAO code, and persisted (default LTAC); a change triggers a fetch. *(Added in S3.)* |
 
 ### 3.5 Alerting: haptics & audio (ALR / HAP / AUD)
 | ID | Pri | Requirement |
@@ -288,7 +289,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | S0 | Platform foundation | FR-PLT-001…008, NFR-REL-001…003, NFR-MNT-001…003, NFR-PERF-003/005, NFR-PWR-001 |
 | S1 | PFD watch face | FR-PFD-001…009, FR-PFD-011, FR-TIM-003 (interim), FR-TIM-006, FR-TIM-007, NFR-PERF-001/002, NFR-USE-002 |
 | S2 | Time sync & connectivity | FR-TIM-001…004, FR-TIM-003 (named zones), FR-TIM-006, FR-TIM-007 (fallback), FR-NET-001…003, NFR-SEC-001 |
-| S3 | METAR weather page | FR-WX-001…005, NFR-SEC-002, NFR-MNT-004 |
+| S3 | METAR weather page | FR-WX-001…006, NFR-SEC-002, NFR-MNT-004 |
 | S4 | Alert Manager & haptics | FR-ALR-001…004, FR-HAP-001…003 |
 | S5 | GPWS audio | FR-AUD-001…005, NFR-PWR-003 |
 | S6 | G-force & flight recorder | FR-REC-001…005, FR-PFD-008 |

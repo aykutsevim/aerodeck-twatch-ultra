@@ -18,7 +18,7 @@ using Handler = void (*)(int argc, const char* const* argv, Reply& reply);
 
 class CommandParser {
 public:
-    static constexpr size_t kMaxLine = 128;
+    static constexpr size_t kMaxLine = 300;   // S3: `ad wx decode "<METAR>"` (raw reports up to 255 chars)
     static constexpr int kMaxTokens = 12;   // "ad simfail" + 8 names + headroom
     static constexpr size_t kMaxCommands = 48;
 

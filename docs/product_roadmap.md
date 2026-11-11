@@ -33,7 +33,7 @@ M5 Experimental ── S12 , S13
 | **S0** | Platform foundation | M0 | — | Must | M | Clean-checkout build incl. LilyGoLib patch; HAL; page ring with 2 placeholder pages + Settings; NVS settings; rail leases; FPS/heap overlay; native test env green | ✅ Done (2026-11-11, PR #1) · manual: T032, T039, T063 |
 | **S1** | PFD watch face | M1 | S0 | Must | L | Horizon follows wrist at ≥30 FPS, LOCK indicator, H/M/S tapes, Zulu/Local, EICAS from PMU | ✅ Done (2026-11-11, PR #2) · manual: T014, T018, T034, T043 |
 | **S2** | Time sync & connectivity | M1 | S0 | Must | M | Provision Wi-Fi; NTP sync at boot + hourly writes RTC; correct TZ; Wi-Fi off after sync | ✅ Done (2026-11-11, PR #3) · manual: T017, T020, T026 (SC-004), T038 (24-h soak) |
-| **S3** | METAR weather page | M1 | S2 | Must | M | LTAC METAR decoded and shown with flight category; STALE/error handling; parser unit tests | ⏳ Planned |
+| **S3** | METAR weather page | M1 | S2 | Must | M | LTAC METAR decoded and shown with flight category; STALE/error handling; parser unit tests | ✅ Done (2026-11-11, PR #4) · manual: T023 (no-internet ×10, Wi-Fi forgotten), T028, T036 (24-h soak) |
 | **S4** | Alert Manager & haptics | M2 | S0 | Must | M | Master annunciator; click haptics on nav; <15 % battery → stick shaker + STALL; ack works | ⏳ Planned |
 | **S5** | GPWS audio | M2 | S4 | Must | M | WAV callouts from LittleFS; hourly chime with quiet hours; amp rail off when idle | ⏳ Planned |
 | **S6** | G-force & flight recorder | M2 | S1 | Must | M | Daily NM + Max G on PFD and Recorder page; 7-day history survives reboot | ⏳ Planned |
@@ -63,7 +63,7 @@ Sizes: S ≈ 2–4 dev-days, M ≈ 1 week, L ≈ 2 weeks (hobby pace, adjust as 
 | Milestone | Definition of done | Status |
 | :--- | :--- | :--- |
 | **M0 Foundation** | Architecture skeleton merged. `pio run -e twatch_ultra -e twatchs3` and `pio test -e native` pass. Constitution ratified. | ✅ Reached (2026-11-11, S0 merged) |
-| **M1 Wearable MVP** | The watch is usable as a daily watch: accurate time (NTP), the PFD face, and weather at a glance. | 🚧 S1, S2 done; S3 open |
+| **M1 Wearable MVP** | The watch is usable as a daily watch: accurate time (NTP), the PFD face, and weather at a glance. | ✅ Done (2026-11-11): S1, S2, S3 merged · manual checks pending as listed per slice |
 | **M2 Cockpit Alive** | Alerts, haptics, voice and the activity recorder work together. Low battery is unmistakable. | ⏳ |
 | **M3 Daily Driver** | Battery life is measured and meets NFR-PWR-002 (≥48 h typical, radios off). Night use is comfortable. Timer is reliable. | ⏳ |
 | **M4 Tactical** | All hardware is in use. Two-device TCAS demo recorded. | ⏳ |

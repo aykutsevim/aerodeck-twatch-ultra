@@ -1,6 +1,7 @@
 // AeroDeck theme: resolution-independent sizing S(px) and palette tokens (FR-025, SAS §8).
 #pragma once
 #include <lvgl.h>
+#include "core/Metar.h"
 #include "core/Types.h"
 
 namespace Theme {
@@ -21,6 +22,13 @@ lv_color_t caution();
 lv_color_t warning();
 lv_color_t advisory();
 lv_color_t accent();
+// Flight category colours (S3, FR-007). NVG variants come with a later slice.
+lv_color_t catVfr();
+lv_color_t catMvfr();
+lv_color_t catIfr();
+lv_color_t catLifr();
+lv_color_t catUnknown();
+lv_color_t catColor(core::Metar::Category c);
 
 // Fonts picked by scale
 const lv_font_t* fontSmall();

@@ -17,6 +17,8 @@ static const SettingDef kDefs[] = {
     {"tzid", SettingType::U16, int32_t(Zones::defaultIndex()), 0, int32_t(Zones::count()) - 1, 0, false, true},
     {"syncmin", SettingType::U16, 60, 15, 1440, 0, false, true}, // sync interval (minutes)
     {"lastsync", SettingType::I32, 0, 0, 0x7FFFFFFF, 0, false, false}, // UTC s of the last successful sync
+    // S3 (schema 4)
+    {"wxstn", SettingType::Str, 0, 4, 4, 0, false, true, "LTAC"},   // METAR station (ICAO)
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 
@@ -91,7 +93,30 @@ bool validateString(SettingKey k, const char* v)
         return false;
     }
     const size_t n = strlen(v);
-    return n >= size_t(d.min) && n <= size_t(d.max);
+    if (n < size_t(d.min) || n > size_t(d.max)) {
+        return false;
+    }
+    if (k == SettingKey::WxStation) {
+        for (size_t i = 0; i < n; i++) {
+            const char c = v[i];
+            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void normalizeString(SettingKey k, char* v)
+{
+    if (!v || k != SettingKey::WxStation) {
+        return;
+    }
+    for (; *v; v++) {
+        if (*v >= 'a' && *v <= 'z') {
+            *v = char(*v - 32);
+        }
+    }
 }
 
 uint16_t migrateTzoffToTzid(int32_t tzoffMin) { return uint16_t(Zones::bestMatch(int16_t(tzoffMin))); }

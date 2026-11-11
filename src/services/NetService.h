@@ -6,7 +6,7 @@
 #include <cstdint>
 #include "services/Snapshot.h"
 
-enum class NetBusy : uint8_t { Idle, Syncing, Testing, Scanning, Setup };
+enum class NetBusy : uint8_t { Idle, Syncing, Testing, Scanning, Setup, Weather };
 enum class NetResult : uint8_t { None, Ok, WrongPassword, NotFound, NoTimeResponse, Timeout, Rejected, Cancelled };
 
 struct NetStatus {
@@ -26,6 +26,9 @@ namespace NetService {
 void begin();                            // rail hook, serial commands, net task
 const Snapshot<NetStatus>& status();
 void requestSync();
+// S3: queue a weather fetch (connect + fetch, one 15 s deadline). Coalesced: repeated calls before it runs, or a
+// sync that fetches meanwhile, produce exactly one fetch. Returns false when Wi-Fi is not set up.
+bool requestWeather();
 void requestTest();
 void startSetup();
 void stopSetup();

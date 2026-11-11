@@ -104,10 +104,23 @@ static void test_line_too_long()
 {
     CommandParser p;
     p.add("info", 0, handler);
-    std::string s = "ad info " + std::string(130, 'x');
+    std::string s = "ad info " + std::string(CommandParser::kMaxLine, 'x');
     CaptureReply r;
     TEST_ASSERT_FALSE(p.dispatch(s.c_str(), r));
     TEST_ASSERT_EQUAL_STRING("ERR line too long", r.lines.back().c_str());
+}
+
+// S3: a full raw METAR (up to 255 chars) fits in one quoted argument.
+static void test_long_quoted_metar()
+{
+    CommandParser p;
+    p.add("wx decode", 1, handler);
+    std::string metar = "METAR LTFM 111250Z 22021KT 9999 SCT032 BKN100 18/12 Q1014 NOSIG RMK " + std::string(180, 'R');
+    std::string line = "ad wx decode \"" + metar + "\"";
+    TEST_ASSERT_TRUE(line.size() <= CommandParser::kMaxLine);
+    CaptureReply r;
+    TEST_ASSERT_TRUE(p.dispatch(line.c_str(), r));
+    TEST_ASSERT_EQUAL_STRING((metar + "|").c_str(), g_args.c_str());
 }
 
 static void test_too_many_tokens()
@@ -200,6 +213,7 @@ int main()
     RUN_TEST(test_prefix_matching_prefers_longest);
     RUN_TEST(test_min_args_enforced);
     RUN_TEST(test_line_too_long);
+    RUN_TEST(test_long_quoted_metar);
     RUN_TEST(test_too_many_tokens);
     RUN_TEST(test_simfail_with_all_names_fits);
     RUN_TEST(test_quoted_tokens);

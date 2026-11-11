@@ -15,6 +15,7 @@ enum class EventType : uint16_t {
     AttitudeStatusChanged,    // S1: Align → Ok/Fail
     ClockChanged,             // S1: clock set via serial / S2: sync
     NetStatusChanged,         // S2: NetService status snapshot updated
+    WeatherUpdated,           // S3: a weather fetch completed (a = WxResult)
 };
 
 struct Event {

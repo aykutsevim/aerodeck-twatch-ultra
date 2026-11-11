@@ -63,6 +63,12 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
   off between syncs). Developers can also use `ad wifi set "<ssid>" "<password>"` over USB.
 - **Time zone:** Settings → Time zone (named zones with summer time; default Istanbul). ZULU always shows UTC.
 - **No network?** `ad time set 2026-11-11T09:24:00Z` (UTC) still works as a fallback.
+- **Weather (WX page):** swipe right from the watch face. It shows the latest METAR for your station (default LTAC):
+  wind (with a compass), visibility, QNH, temperature/dewpoint, clouds, the raw report, and the flight category
+  (VFR green, MVFR blue, IFR red, LIFR magenta). It updates with every time sync (same Wi-Fi session) and when you tap
+  **REFRESH**. **STALE** means the report is more than 90 min old; NO WIFI / NET FAIL / NO REPORT / SRV ERROR say why
+  the last fetch failed (the last good report stays). Change the station in Settings → Weather station (four letter
+  wheels) or with `ad wx set LTFM`.
 - **Swipe left/right** to move through the page ring: PFD → Page A → Page B → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
@@ -90,6 +96,9 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad wifi setup` · `ad wifi setup stop` | Start/stop the phone setup hotspot (the code is shown on the watch only) |
 | `ad sync` | Sync time now |
 | `ad tz` · `ad tz list [filter]` · `ad tz set <name\|index>` | Time zone |
+| `ad wx` · `ad wx fields` · `ad wx fetch` | Weather state, decoded fields, fetch now |
+| `ad wx set <ICAO>` | Weather station (4 letters) |
+| `ad wx decode "<METAR>" [show]` · `ad wx clear` · `ad wx age <s>` | Test hooks: decode text (optionally show it on the WX page), clear the cache, pretend the report is N s old |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
 | `ad att sweep <on\|off>` | Test hook: synthetic horizon motion for FPS measurement |
@@ -98,7 +107,8 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 
 Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md) ·
 [S1 additions](specs/002-pfd-watch-face/contracts/serial_commands.md) ·
-[S2 additions](specs/003-time-sync/contracts/serial_commands.md).
+[S2 additions](specs/003-time-sync/contracts/serial_commands.md) ·
+[S3 additions](specs/004-metar-weather/contracts/serial_commands.md).
 
 ## Project layout
 
