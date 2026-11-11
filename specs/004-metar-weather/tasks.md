@@ -403,7 +403,7 @@ reason.
   - no unmarked report older than 90 min (SC-006).
 
   It may run together with S2 T038. Then complete `specs/004-metar-weather/validation.md` with SC-001…SC-007.
-- [ ] T037 After the PR is merged, update `docs/product_roadmap.md` per the **status tracking rule**: S3 → ✅ Done with
+- [X] T037 After the PR is merged, update `docs/product_roadmap.md` per the **status tracking rule**: S3 → ✅ Done with
   the date, the PR number and any pending manual checks; M1 → ✅ when its DoD is met.
 
 ---
