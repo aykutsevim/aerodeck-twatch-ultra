@@ -10,6 +10,7 @@ enum class CautionId : uint8_t {
     SafeMode,
     ClockNotSet,   // S1
     LowFuel,       // S1
+    TimeUnsync,    // S2 (advisory)
 };
 
 struct Caution {

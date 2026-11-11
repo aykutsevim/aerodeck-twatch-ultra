@@ -7,6 +7,7 @@
 #include <LV_Helper.h>
 #include "board/IBoard.h"
 #include "board/I2cLock.h"
+#include "board/I2cRecover.h"
 #include "core/SimFail.h"
 #include <bosch/bhy2_parse.h>
 
@@ -36,9 +37,8 @@ public:
 
         // R3: LilyGoLib asserts if the PMU is missing; probe first so we never enter that path.
         stage(BootStage::PmuProbe);
-        Wire.begin(SDA, SCL);
-        Wire.beginTransmission(kPmuAddr);
-        if (Wire.endTransmission() != 0) {
+        // Recover a bus left stuck by a soft reset mid-transfer, then probe (with retries).
+        if (!i2c::probeWithRecovery(SDA, SCL, kPmuAddr)) {
             r.pmuOk = false;
             pmuOk_ = false;
             return r;

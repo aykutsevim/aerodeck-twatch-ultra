@@ -1,5 +1,9 @@
 #include "pages/SettingsPage.h"
 #include "board/IBoard.h"
+#include "core/Zones.h"
+#include <cstring>
+#include <ctime>
+#include "services/NetService.h"
 #include "services/SettingsStore.h"
 #include "ui/Theme.h"
 
@@ -53,12 +57,6 @@ void brightStep(lv_event_t* e)
     SettingsStore::set(SettingKey::Bright, v);   // out-of-range is rejected by the store
 }
 
-void tzStep(lv_event_t* e)
-{
-    int delta = int(intptr_t(lv_event_get_user_data(e)));
-    SettingsStore::set(SettingKey::TzOff, SettingsStore::get(SettingKey::TzOff) + delta * 30);   // range-checked
-}
-
 void overlayChanged(lv_event_t* e)
 {
     lv_obj_t* sw = lv_event_get_target_obj(e);
@@ -95,6 +93,92 @@ void restoreClicked(lv_event_t*)
     lv_obj_add_event_cb(ok, msgboxConfirm, LV_EVENT_CLICKED, mb);
     lv_obj_set_width(mb, lv_pct(80));
     lv_obj_center(mb);
+}
+
+// ---- S2: network & time zone ----
+
+void setupClicked(lv_event_t*) { NetService::startSetup(); }
+void syncClicked(lv_event_t*) { NetService::requestSync(); }
+
+void forgetConfirm(lv_event_t* e)
+{
+    NetService::forget();
+    lv_msgbox_close(static_cast<lv_obj_t*>(lv_event_get_user_data(e)));
+}
+
+void forgetClicked(lv_event_t*)
+{
+    lv_obj_t* mb = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mb, "Forget network?");
+    lv_msgbox_add_text(mb, "The watch will stop syncing time until Wi-Fi is set up again.");
+    lv_obj_t* cancel = lv_msgbox_add_footer_button(mb, "Cancel");
+    lv_obj_t* ok = lv_msgbox_add_footer_button(mb, "Forget");
+    lv_obj_set_height(cancel, Theme::S(48));
+    lv_obj_set_height(ok, Theme::S(48));
+    lv_obj_add_event_cb(cancel, msgboxCancel, LV_EVENT_CLICKED, mb);
+    lv_obj_add_event_cb(ok, forgetConfirm, LV_EVENT_CLICKED, mb);
+    lv_obj_set_width(mb, lv_pct(80));
+    lv_obj_center(mb);
+}
+
+void zoneApply(lv_event_t* e)
+{
+    lv_obj_t* roller = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    SettingsStore::set(SettingKey::TzId, int32_t(lv_roller_get_selected(roller)));
+    lv_obj_delete(lv_obj_get_parent(roller));
+}
+
+void zoneCancel(lv_event_t* e) { lv_obj_delete(static_cast<lv_obj_t*>(lv_event_get_user_data(e))); }
+
+// Modal zone picker: roller with all zones (named first, then fixed offsets), OK / Cancel. FR-013, FR-014.
+void zoneClicked(lv_event_t*)
+{
+    static char* options = nullptr;   // built once (~1.5 KB) and kept
+    if (!options) {
+        size_t len = 0;
+        for (size_t i = 0; i < core::Zones::count(); i++) {
+            len += strlen(core::Zones::at(i).name) + 1;
+        }
+        options = static_cast<char*>(lv_malloc(len + 1));
+        char* w = options;
+        for (size_t i = 0; i < core::Zones::count(); i++) {
+            size_t n = strlen(core::Zones::at(i).name);
+            memcpy(w, core::Zones::at(i).name, n);
+            w += n;
+            *w++ = (i + 1 < core::Zones::count()) ? '\n' : '\0';
+        }
+    }
+    lv_obj_t* box = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(box, lv_pct(84), lv_pct(70));
+    lv_obj_center(box);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t* roller = lv_roller_create(box);
+    lv_roller_set_options(roller, options, LV_ROLLER_MODE_NORMAL);
+    lv_roller_set_visible_row_count(roller, 5);
+    lv_obj_set_width(roller, lv_pct(100));
+    lv_roller_set_selected(roller, uint32_t(SettingsStore::get(SettingKey::TzId)), LV_ANIM_OFF);
+    lv_obj_t* btns = lv_obj_create(box);
+    lv_obj_remove_style_all(btns);
+    lv_obj_set_size(btns, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btns, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t* c = smallButton(btns, "Cancel", zoneCancel, box);
+    lv_obj_set_width(c, Theme::S(70));
+    lv_obj_t* ok = smallButton(btns, "OK", zoneApply, roller);
+    lv_obj_set_width(ok, Theme::S(70));
+}
+
+lv_obj_t* wideButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb)
+{
+    lv_obj_t* b = lv_button_create(parent);
+    lv_obj_add_style(b, Theme::button(), 0);
+    lv_obj_set_flex_grow(b, 1);
+    lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l = lv_label_create(b);
+    lv_label_set_text(l, text);
+    lv_obj_center(l);
+    return b;
 }
 
 // Interactive controls must not turn a horizontal drag into a page swipe.
@@ -142,17 +226,30 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_add_event_cb(logDd_, logChanged, LV_EVENT_VALUE_CHANGED, nullptr);
     noSwipe(logDd_);
 
-    r = row(col, "Local offset");
-    lv_obj_t* tzCtl = lv_obj_create(r);
-    lv_obj_remove_style_all(tzCtl);
-    lv_obj_set_size(tzCtl, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(tzCtl, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(tzCtl, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(tzCtl, Theme::S(8), 0);
-    smallButton(tzCtl, LV_SYMBOL_MINUS, tzStep, reinterpret_cast<void*>(intptr_t(-1)));
-    tzVal_ = lv_label_create(tzCtl);
-    lv_obj_add_style(tzVal_, Theme::body(), 0);
-    smallButton(tzCtl, LV_SYMBOL_PLUS, tzStep, reinterpret_cast<void*>(intptr_t(1)));
+    heading(col, "NETWORK & TIME");
+    r = row(col, "Network");
+    netVal_ = lv_label_create(r);
+    lv_obj_add_style(netVal_, Theme::body(), 0);
+    r = row(col, "Status");
+    netStatus_ = lv_label_create(r);
+    lv_obj_add_style(netStatus_, Theme::body(), 0);
+    r = row(col, "Last sync");
+    lastSync_ = lv_label_create(r);
+    lv_obj_add_style(lastSync_, Theme::body(), 0);
+    lv_obj_t* nb = lv_obj_create(col);
+    lv_obj_remove_style_all(nb);
+    lv_obj_set_size(nb, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(nb, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(nb, Theme::S(4), 0);
+    wideButton(nb, "Set up Wi-Fi", setupClicked);
+    wideButton(nb, "Sync now", syncClicked);
+    wideButton(nb, "Forget", forgetClicked);
+    r = row(col, "Time zone");
+    lv_obj_t* zb = lv_button_create(r);
+    lv_obj_add_style(zb, Theme::button(), 0);
+    lv_obj_add_event_cb(zb, zoneClicked, LV_EVENT_CLICKED, nullptr);
+    tzVal_ = lv_label_create(zb);
+    lv_obj_center(tzVal_);
 
     lv_obj_t* rb = lv_button_create(col);
     lv_obj_add_style(rb, Theme::button(), 0);
@@ -196,9 +293,29 @@ void SettingsPage::refresh()
         lv_obj_remove_state(overlaySw_, LV_STATE_CHECKED);
     }
     lv_dropdown_set_selected(logDd_, uint32_t(SettingsStore::get(SettingKey::LogLvl)));
-    int32_t tz = SettingsStore::get(SettingKey::TzOff);
-    int32_t atz = tz < 0 ? -tz : tz;
-    lv_label_set_text_fmt(tzVal_, "UTC%c%02ld:%02ld", tz < 0 ? '-' : '+', (long)(atz / 60), (long)(atz % 60));
+    lv_label_set_text(tzVal_, core::Zones::at(size_t(SettingsStore::get(SettingKey::TzId))).name);
+
+    // S2: network & sync status (FR-017)
+    char ssid[33];
+    SettingsStore::getStr(SettingKey::WifiSsid, ssid, sizeof ssid);
+    lv_label_set_text(netVal_, ssid[0] ? ssid : "not set");
+    NetStatus st = NetService::status().read();
+    if (st.busy != NetBusy::Idle) {
+        lv_label_set_text(netStatus_, NetService::busyName(st.busy));
+    } else {
+        lv_label_set_text(netStatus_, st.lastResult == NetResult::None ? "-" : NetService::resultName(st.lastResult));
+    }
+    const int64_t last = int64_t(SettingsStore::get(SettingKey::LastSync));
+    if (last <= 0) {
+        lv_label_set_text(lastSync_, "never");
+    } else {
+        const int64_t age = int64_t(time(nullptr)) - last;
+        if (age < 3600) {
+            lv_label_set_text_fmt(lastSync_, "%ld min ago", long(age / 60));
+        } else {
+            lv_label_set_text_fmt(lastSync_, "%ld h ago", long(age / 3600));
+        }
+    }
 
     for (uint8_t i = 0; i < uint8_t(core::Periph::Count); i++) {
         lv_obj_t* l = lv_obj_get_child(statusBox_, i);
@@ -208,5 +325,14 @@ void SettingsPage::refresh()
                                                         : Theme::caution();
         lv_obj_set_style_text_color(l, c, 0);
         lv_label_set_text_fmt(l, "%s %s", core::periphName(core::Periph(i)), core::periphStateName(s));
+    }
+}
+
+void SettingsPage::onTick(uint32_t dtMs)
+{
+    tickAcc_ += dtMs;
+    if (tickAcc_ >= 10000) {   // "Last sync" age (FR-017)
+        tickAcc_ = 0;
+        refresh();
     }
 }

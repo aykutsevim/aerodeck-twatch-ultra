@@ -13,7 +13,7 @@ constexpr uint32_t operator|(Cap a, Cap b) { return uint32_t(a) | uint32_t(b); }
 constexpr uint32_t operator|(uint32_t a, Cap b) { return a | uint32_t(b); }
 constexpr bool hasCap(uint32_t caps, Cap c) { return (caps & uint32_t(c)) != 0; }
 
-enum class Rail : uint8_t { Display, Lora, AudioAmp, Gnss, Nfc, Sensor, Count };
+enum class Rail : uint8_t { Display, Lora, AudioAmp, Gnss, Nfc, Sensor, Wifi, Count };   // Wifi: S2, via a hook
 
 enum class Periph : uint8_t {
     Pmu, Display, Touch, Rtc, Imu, Haptics, Lora, Nfc, Gnss, SdCard, Mic, Speaker, Expander, Count

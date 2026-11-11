@@ -32,7 +32,20 @@ static const char* railName(Rail r)
     case Rail::Gnss: return "gnss";
     case Rail::Nfc: return "nfc";
     case Rail::Sensor: return "sensor";
+    case Rail::Wifi: return "wifi";
     default: return "?";
+    }
+}
+
+// Rails that are not PMU outputs (Wi-Fi) are switched by a hook registered by their owning service (S2).
+static PowerService::RailHook s_hooks[size_t(Rail::Count)];
+
+static void switchRail(Rail r, bool on)
+{
+    if (s_hooks[size_t(r)]) {
+        s_hooks[size_t(r)](on);
+    } else {
+        board().setRail(r, on);
     }
 }
 
@@ -50,10 +63,10 @@ static void adjust(Rail r, int delta)
         c--;
     }
     if (before == 0 && c == 1) {
-        board().setRail(r, true);
+        switchRail(r, true);
         LOGI("pwr", "rail %s ON", railName(r));
     } else if (before == 1 && c == 0) {
-        board().setRail(r, false);
+        switchRail(r, false);
         LOGI("pwr", "rail %s OFF", railName(r));
     }
     xSemaphoreGive(s_mutex);
@@ -86,9 +99,9 @@ void begin()
 {
     s_mutex = xSemaphoreCreateMutex();
     // FR-017: no feature needs these in S0, so they start OFF. Display and Sensor stay on (touch/IMU).
-    const Rail optional[] = {Rail::Lora, Rail::AudioAmp, Rail::Gnss, Rail::Nfc};
+    const Rail optional[] = {Rail::Lora, Rail::AudioAmp, Rail::Gnss, Rail::Nfc, Rail::Wifi};
     for (Rail r : optional) {
-        board().setRail(r, false);
+        switchRail(r, false);
         LOGI("pwr", "rail %s OFF (boot)", railName(r));
     }
 }
@@ -97,11 +110,11 @@ const Snapshot<PowerSnapshot>& power() { return s_snap; }
 
 void enforceIdleRails()
 {
-    const Rail optional[] = {Rail::Lora, Rail::AudioAmp, Rail::Gnss, Rail::Nfc};
+    const Rail optional[] = {Rail::Lora, Rail::AudioAmp, Rail::Gnss, Rail::Nfc, Rail::Wifi};
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     for (Rail r : optional) {
         if (s_ref[size_t(r)] == 0) {
-            board().setRail(r, false);
+            switchRail(r, false);
         }
     }
     xSemaphoreGive(s_mutex);
@@ -109,6 +122,8 @@ void enforceIdleRails()
 }
 
 uint8_t refcount(Rail r) { return s_ref[size_t(r)]; }
+
+void setRailHook(Rail r, RailHook fn) { s_hooks[size_t(r)] = fn; }
 
 void tick(uint32_t nowMs)
 {

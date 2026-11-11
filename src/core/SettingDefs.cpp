@@ -1,6 +1,7 @@
 #include "core/SettingDefs.h"
 #include <cstdio>
 #include <cstring>
+#include "core/Zones.h"
 
 namespace core {
 
@@ -10,7 +11,12 @@ static const SettingDef kDefs[] = {
     {"overlay", SettingType::Bool, 0, 0, 1, 0, false, true},     // diagnostics overlay
     {"loglvl", SettingType::U8, 2, 0, 3, 0, false, true},        // 0 E,1 W,2 I,3 D
     {"simfail", SettingType::U16, 0, 0, 0xFF, 0, false, false},  // simulated failures (serial only)
-    {"tzoff", SettingType::I32, 180, -720, 840, 30, false, true}, // S1: local = UTC + tzoff minutes
+    // S2 (schema 3)
+    {"wifissid", SettingType::Str, 0, 1, 32, 0, false, false},   // set via setup portal / `ad wifi set`
+    {"wifipsk", SettingType::Str, 0, 8, 63, 0, true, false},     // WPA2/3-Personal; secret
+    {"tzid", SettingType::U16, int32_t(Zones::defaultIndex()), 0, int32_t(Zones::count()) - 1, 0, false, true},
+    {"syncmin", SettingType::U16, 60, 15, 1440, 0, false, true}, // sync interval (minutes)
+    {"lastsync", SettingType::I32, 0, 0, 0x7FFFFFFF, 0, false, false}, // UTC s of the last successful sync
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 
@@ -77,5 +83,17 @@ void formatSettingForOutput(const SettingDef& d, int32_t value, char* out, size_
         snprintf(out, n, "%ld", (long)value);
     }
 }
+
+bool validateString(SettingKey k, const char* v)
+{
+    const SettingDef& d = settingDef(k);
+    if (d.type != SettingType::Str || !v) {
+        return false;
+    }
+    const size_t n = strlen(v);
+    return n >= size_t(d.min) && n <= size_t(d.max);
+}
+
+uint16_t migrateTzoffToTzid(int32_t tzoffMin) { return uint16_t(Zones::bestMatch(int16_t(tzoffMin))); }
 
 } // namespace core

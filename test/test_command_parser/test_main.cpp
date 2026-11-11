@@ -128,6 +128,59 @@ static void test_simfail_with_all_names_fits()
     TEST_ASSERT_EQUAL(8, g_argc);
 }
 
+// S2: double-quoted tokens (SSIDs/passwords with spaces).
+static void test_quoted_tokens()
+{
+    CommandParser p;
+    p.add("wifi set", 2, handler);
+    CaptureReply r;
+    TEST_ASSERT_TRUE(p.dispatch("ad wifi set \"My Home WiFi\" \"pa ss\"", r));
+    TEST_ASSERT_EQUAL(2, g_argc);
+    TEST_ASSERT_EQUAL_STRING("My Home WiFi|pa ss|", g_args.c_str());
+}
+
+static void test_quoted_escapes()
+{
+    CommandParser p;
+    p.add("wifi set", 2, handler);
+    CaptureReply r;
+    // Command line text: ad wifi set "a\"b" "c\\d"  →  tokens  a"b  and  c\d
+    TEST_ASSERT_TRUE(p.dispatch("ad wifi set \"a\\\"b\" \"c\\\\d\"", r));
+    TEST_ASSERT_EQUAL_STRING("a\"b|c\\d|", g_args.c_str());
+}
+
+static void test_empty_quoted_token()
+{
+    CommandParser p;
+    p.add("wifi set", 2, handler);
+    CaptureReply r;
+    TEST_ASSERT_TRUE(p.dispatch("ad wifi set \"\" \"x\"", r));
+    TEST_ASSERT_EQUAL(2, g_argc);
+    TEST_ASSERT_EQUAL_STRING("|x|", g_args.c_str());
+}
+
+static void test_unterminated_quote()
+{
+    CommandParser p;
+    p.add("wifi set", 2, handler);
+    CaptureReply r;
+    TEST_ASSERT_FALSE(p.dispatch("ad wifi set \"oops x", r));
+    TEST_ASSERT_EQUAL(0, g_calls);
+    TEST_ASSERT_EQUAL_STRING("ERR unterminated quote", r.lines.back().c_str());
+}
+
+static void test_max_ssid_and_psk_fit()
+{
+    CommandParser p;
+    p.add("wifi set", 2, handler);
+    CaptureReply r;
+    std::string ssid(32, 'S'), psk(63, 'P');
+    std::string line = "ad wifi set \"" + ssid + "\" \"" + psk + "\"";
+    TEST_ASSERT_TRUE(line.size() <= CommandParser::kMaxLine);
+    TEST_ASSERT_TRUE(p.dispatch(line.c_str(), r));
+    TEST_ASSERT_EQUAL_STRING((ssid + "|" + psk + "|").c_str(), g_args.c_str());
+}
+
 static void test_help_lists_patterns()
 {
     CommandParser p;
@@ -149,6 +202,11 @@ int main()
     RUN_TEST(test_line_too_long);
     RUN_TEST(test_too_many_tokens);
     RUN_TEST(test_simfail_with_all_names_fits);
+    RUN_TEST(test_quoted_tokens);
+    RUN_TEST(test_quoted_escapes);
+    RUN_TEST(test_empty_quoted_token);
+    RUN_TEST(test_unterminated_quote);
+    RUN_TEST(test_max_ssid_and_psk_fit);
     RUN_TEST(test_help_lists_patterns);
     return UNITY_END();
 }

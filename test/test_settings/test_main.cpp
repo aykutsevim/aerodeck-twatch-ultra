@@ -1,6 +1,8 @@
 #include <unity.h>
 #include <cstring>
+#include <string>
 #include "core/SettingDefs.h"
+#include "core/Zones.h"
 
 using namespace core;
 
@@ -86,28 +88,67 @@ static void test_format_masks_secret()
     TEST_ASSERT_EQUAL_STRING("2", out);
 }
 
-static void test_tzoff_s1()
+// S2 schema v3: tzoff replaced by tzid; Wi-Fi strings; sync interval; last sync.
+static void test_schema_v3()
 {
-    const SettingDef& t = settingDef(SettingKey::TzOff);
-    TEST_ASSERT_EQUAL_STRING("tzoff", t.key);
-    TEST_ASSERT_EQUAL(int(SettingType::I32), int(t.type));
-    TEST_ASSERT_EQUAL(180, t.def);
-    TEST_ASSERT_EQUAL(-720, t.min);
-    TEST_ASSERT_EQUAL(840, t.max);
-    TEST_ASSERT_EQUAL(30, t.step);
-    TEST_ASSERT_TRUE(t.editable);
-    TEST_ASSERT_TRUE(validateSetting(SettingKey::TzOff, 330));
-    TEST_ASSERT_TRUE(validateSetting(SettingKey::TzOff, -720));
-    TEST_ASSERT_TRUE(validateSetting(SettingKey::TzOff, 0));
-    TEST_ASSERT_FALSE(validateSetting(SettingKey::TzOff, 335));
-    TEST_ASSERT_FALSE(validateSetting(SettingKey::TzOff, -750));
-    TEST_ASSERT_FALSE(validateSetting(SettingKey::TzOff, 870));
+    TEST_ASSERT_EQUAL(3, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(2, 3, true)));
+    TEST_ASSERT_EQUAL(-1, findSettingKey("tzoff"));
 }
 
-static void test_schema_v2_migrates_v1()
+static void test_wifi_strings()
 {
-    TEST_ASSERT_EQUAL(2, kSchemaVersion);
-    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(1, 2, true)));
+    const SettingDef& s = settingDef(SettingKey::WifiSsid);
+    TEST_ASSERT_EQUAL_STRING("wifissid", s.key);
+    TEST_ASSERT_EQUAL(int(SettingType::Str), int(s.type));
+    TEST_ASSERT_EQUAL(32, s.max);
+    TEST_ASSERT_FALSE(s.editable);   // set via setup/serial, not the generic `ad set`
+    TEST_ASSERT_FALSE(s.secret);
+    const SettingDef& k = settingDef(SettingKey::WifiPsk);
+    TEST_ASSERT_EQUAL_STRING("wifipsk", k.key);
+    TEST_ASSERT_EQUAL(int(SettingType::Str), int(k.type));
+    TEST_ASSERT_EQUAL(63, k.max);
+    TEST_ASSERT_TRUE(k.secret);
+    char out[16];
+    formatSettingForOutput(k, 0, out, sizeof out);
+    TEST_ASSERT_EQUAL_STRING("***", out);
+}
+
+static void test_validate_strings()
+{
+    TEST_ASSERT_TRUE(validateString(SettingKey::WifiSsid, "MyNet"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WifiSsid, ""));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WifiSsid, "123456789012345678901234567890123"));   // 33
+    TEST_ASSERT_TRUE(validateString(SettingKey::WifiPsk, "12345678"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WifiPsk, "1234567"));   // < 8: WPA2/3 only
+    TEST_ASSERT_FALSE(validateString(SettingKey::WifiPsk, ""));         // open networks unsupported
+    std::string p63(63, 'x'), p64(64, 'x');
+    TEST_ASSERT_TRUE(validateString(SettingKey::WifiPsk, p63.c_str()));
+    TEST_ASSERT_FALSE(validateString(SettingKey::WifiPsk, p64.c_str()));
+}
+
+static void test_tzid_syncmin_lastsync()
+{
+    const SettingDef& t = settingDef(SettingKey::TzId);
+    TEST_ASSERT_EQUAL_STRING("tzid", t.key);
+    TEST_ASSERT_EQUAL(int(SettingType::U16), int(t.type));
+    TEST_ASSERT_EQUAL(int(Zones::defaultIndex()), t.def);
+    TEST_ASSERT_EQUAL(int(Zones::count()) - 1, t.max);
+    TEST_ASSERT_TRUE(t.editable);
+    const SettingDef& m = settingDef(SettingKey::SyncMin);
+    TEST_ASSERT_EQUAL(60, m.def);
+    TEST_ASSERT_EQUAL(15, m.min);
+    TEST_ASSERT_EQUAL(1440, m.max);
+    TEST_ASSERT_TRUE(m.editable);
+    const SettingDef& l = settingDef(SettingKey::LastSync);
+    TEST_ASSERT_EQUAL(int(SettingType::I32), int(l.type));
+    TEST_ASSERT_FALSE(l.editable);
+}
+
+static void test_migrate_tzoff_to_tzid()
+{
+    TEST_ASSERT_EQUAL_STRING("Istanbul", Zones::at(migrateTzoffToTzid(180)).name);
+    TEST_ASSERT_EQUAL_STRING("Kolkata", Zones::at(migrateTzoffToTzid(330)).name);
 }
 
 static void test_s0_settings_have_no_step()
@@ -116,10 +157,10 @@ static void test_s0_settings_have_no_step()
     TEST_ASSERT_TRUE(validateSetting(SettingKey::Bright, 1));   // step 0 = any value in range
 }
 
-static void test_no_s0_setting_is_secret()
+static void test_only_psk_is_secret()
 {
     for (size_t i = 0; i < settingCount(); i++) {
-        TEST_ASSERT_FALSE(settingDef(SettingKey(i)).secret);
+        TEST_ASSERT_EQUAL(SettingKey(i) == SettingKey::WifiPsk, settingDef(SettingKey(i)).secret);
     }
 }
 
@@ -133,9 +174,12 @@ int main()
     RUN_TEST(test_schema_action);
     RUN_TEST(test_find_key);
     RUN_TEST(test_format_masks_secret);
-    RUN_TEST(test_tzoff_s1);
-    RUN_TEST(test_schema_v2_migrates_v1);
+    RUN_TEST(test_schema_v3);
+    RUN_TEST(test_wifi_strings);
+    RUN_TEST(test_validate_strings);
+    RUN_TEST(test_tzid_syncmin_lastsync);
+    RUN_TEST(test_migrate_tzoff_to_tzid);
     RUN_TEST(test_s0_settings_have_no_step);
-    RUN_TEST(test_no_s0_setting_is_secret);
+    RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();
 }

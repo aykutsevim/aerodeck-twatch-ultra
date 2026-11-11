@@ -11,6 +11,7 @@
 #include "pages/SettingsPage.h"
 #include "services/AttitudeService.h"
 #include "services/BoardCommands.h"
+#include "services/NetService.h"
 #include "services/Cautions.h"
 #include "services/EventBus.h"
 #include "services/Log.h"
@@ -21,6 +22,7 @@
 #include "services/TimeService.h"
 #include "ui/CautionBanner.h"
 #include "ui/DebugOverlay.h"
+#include "ui/NetSetupOverlay.h"
 #include "ui/PageManager.h"
 #include "ui/Theme.h"
 
@@ -186,6 +188,8 @@ void setup()
     SvcTask::addTick(PowerService::tick);
     SvcTask::addTick(TimeService::tick);
     SvcTask::addTick(AttitudeService::tick);
+    NetService::begin();                 // after PowerService (Rail::Wifi hook) and TimeService
+    SvcTask::addTick(NetService::tick);
     SvcTask::begin();
 
     g_uiQueue = EventBus::subscribe(16);
@@ -197,6 +201,7 @@ void setup()
 
     CautionBanner::begin();
     DebugOverlay::begin();
+    NetSetupOverlay::begin();
     raiseBootCautions(br, st, mode);
     PageManager::begin();
     applySetting(SettingKey::Bright);
@@ -236,6 +241,10 @@ void loop()
             if (e.a == 0) PageManager::next();
             else if (e.a == 1) PageManager::prev();
             else PageManager::buttonPressed();
+            break;
+        case EventType::NetStatusChanged:
+            NetSetupOverlay::update(NetService::status().read());
+            g_settings.refresh();
             break;
         case EventType::PeriphStatusChanged:
             g_settings.refresh();
