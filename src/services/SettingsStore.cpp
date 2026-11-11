@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <cstdlib>
+#include <cstring>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "services/EventBus.h"
@@ -13,6 +14,9 @@ using namespace core;
 namespace SettingsStore {
 
 static int32_t s_cache[size_t(SettingKey::Count)];
+static constexpr size_t kStrMax = 64;   // longest string setting (psk 63) + NUL
+static char s_str[size_t(SettingKey::Count)][kStrMax];   // used only for SettingType::Str
+static portMUX_TYPE s_strLock = portMUX_INITIALIZER_UNLOCKED;
 static bool s_storageOk;
 static QueueHandle_t s_writes;   // items: SettingKey index, or 0xFF = restore defaults
 static constexpr uint8_t kRestoreAll = 0xFF;
@@ -27,8 +31,22 @@ static bool readKey(Preferences& p, const SettingDef& d, int32_t& out)
     case SettingType::U8: out = p.getUChar(d.key); break;
     case SettingType::U16: out = p.getUShort(d.key); break;
     case SettingType::I32: out = p.getInt(d.key); break;
+    case SettingType::Str: out = 0; break;   // strings are read with readStr
     }
     return true;
+}
+
+static void readStr(Preferences& p, size_t i, const SettingDef& d)
+{
+    char buf[kStrMax] = {0};
+    if (p.isKey(d.key)) {
+        p.getString(d.key, buf, sizeof buf);
+    }
+    if (buf[0] != '\0' && !validateString(SettingKey(i), buf)) {
+        LOGW("set", "setting '%s' invalid length; cleared", d.key);   // key only, never value
+        buf[0] = '\0';
+    }
+    memcpy(s_str[i], buf, kStrMax);
 }
 
 static void writeKey(Preferences& p, const SettingDef& d, int32_t v)
@@ -38,6 +56,20 @@ static void writeKey(Preferences& p, const SettingDef& d, int32_t v)
     case SettingType::U8: p.putUChar(d.key, uint8_t(v)); break;
     case SettingType::U16: p.putUShort(d.key, uint16_t(v)); break;
     case SettingType::I32: p.putInt(d.key, v); break;
+    case SettingType::Str: break;   // written by writeStr
+    }
+}
+
+static void writeStr(Preferences& p, size_t i, const SettingDef& d)
+{
+    char buf[kStrMax];
+    portENTER_CRITICAL(&s_strLock);
+    memcpy(buf, s_str[i], kStrMax);
+    portEXIT_CRITICAL(&s_strLock);
+    if (buf[0] == '\0') {
+        p.remove(d.key);
+    } else {
+        p.putString(d.key, buf);
     }
 }
 
@@ -47,8 +79,12 @@ static void writeDefaults(Preferences& p)
     p.putUShort(kSchemaKey, kSchemaVersion);
     for (size_t i = 0; i < settingCount(); i++) {
         const SettingDef& d = settingDef(SettingKey(i));
-        writeKey(p, d, d.def);
         s_cache[i] = d.def;
+        if (d.type == SettingType::Str) {
+            s_str[i][0] = '\0';   // restore defaults also forgets the Wi-Fi network
+            continue;
+        }
+        writeKey(p, d, d.def);
     }
 }
 
@@ -80,8 +116,15 @@ BootStatus begin()
         p.end();
         return BootStatus::ResetNewer;
     case SchemaAction::Migrate:
-        // No migrations exist yet (schema 1). Future: run stored+1..current steps here.
         LOGI("set", "migrating settings schema %u -> %u", stored, kSchemaVersion);
+        if (stored < 3 && p.isKey(kLegacyTzoffKey)) {
+            // 2→3 (S2): the S1 fixed offset becomes an equivalent named/fixed zone, so LOCAL doesn't change.
+            int32_t tzoff = p.getInt(kLegacyTzoffKey, 180);
+            uint16_t tzid = migrateTzoffToTzid(tzoff);
+            p.putUShort(settingDef(SettingKey::TzId).key, tzid);
+            p.remove(kLegacyTzoffKey);
+            LOGI("set", "migration: tzoff %ld -> tzid %u", (long)tzoff, tzid);
+        }
         p.putUShort(kSchemaKey, kSchemaVersion);
         status = BootStatus::Migrated;
         break;
@@ -90,6 +133,10 @@ BootStatus begin()
     }
     for (size_t i = 0; i < settingCount(); i++) {
         const SettingDef& d = settingDef(SettingKey(i));
+        if (d.type == SettingType::Str) {
+            readStr(p, i, d);
+            continue;
+        }
         int32_t v = 0;
         bool has = readKey(p, d, v);
         s_cache[i] = sanitizeSetting(SettingKey(i), v, has);
@@ -131,10 +178,56 @@ SetResult set(SettingKey k, int32_t v, bool internal)
     return SetResult::Ok;
 }
 
+void getStr(SettingKey k, char* out, size_t n)
+{
+    if (!out || n == 0) {
+        return;
+    }
+    size_t i = size_t(k);
+    portENTER_CRITICAL(&s_strLock);
+    strncpy(out, i < settingCount() ? s_str[i] : "", n - 1);
+    portEXIT_CRITICAL(&s_strLock);
+    out[n - 1] = '\0';
+}
+
+static void storeStr(SettingKey k, const char* v)
+{
+    size_t i = size_t(k);
+    portENTER_CRITICAL(&s_strLock);
+    strncpy(s_str[i], v, kStrMax - 1);
+    s_str[i][kStrMax - 1] = '\0';
+    portEXIT_CRITICAL(&s_strLock);
+    uint8_t item = uint8_t(k);
+    if (s_writes) {
+        xQueueSend(s_writes, &item, 0);
+    }
+    EventBus::publish(EventType::SettingsChanged, uint32_t(k));
+}
+
+SetResult setStr(SettingKey k, const char* v)
+{
+    if (settingDef(k).type != SettingType::Str) {
+        return SetResult::NotEditable;
+    }
+    if (!validateString(k, v)) {
+        return SetResult::OutOfRange;
+    }
+    storeStr(k, v);
+    return SetResult::Ok;
+}
+
+void clearStr(SettingKey k)
+{
+    if (settingDef(k).type == SettingType::Str) {
+        storeStr(k, "");
+    }
+}
+
 void restoreDefaults()
 {
     for (size_t i = 0; i < settingCount(); i++) {
         s_cache[i] = settingDef(SettingKey(i)).def;
+        s_str[i][0] = '\0';
     }
     uint8_t item = kRestoreAll;
     if (s_writes) {
@@ -165,8 +258,12 @@ void tick(uint32_t)
             LOGI("set", "defaults restored");
         } else if (item < settingCount()) {
             const SettingDef& d = settingDef(SettingKey(item));
-            writeKey(p, d, s_cache[item]);
-            LOGD("set", "saved '%s'", d.key);
+            if (d.type == SettingType::Str) {
+                writeStr(p, item, d);
+            } else {
+                writeKey(p, d, s_cache[item]);
+            }
+            LOGD("set", "saved '%s'", d.key);   // key only, never value
         }
     } while (xQueueReceive(s_writes, &item, 0) == pdTRUE);
     p.end();
@@ -176,9 +273,13 @@ void tick(uint32_t)
 
 static void printSetting(core::Reply& r, size_t i)
 {
-    char v[24], line[48];
+    char v[kStrMax], line[kStrMax + 24];
     const SettingDef& d = settingDef(SettingKey(i));
-    formatSettingForOutput(d, s_cache[i], v, sizeof v);
+    if (d.type == SettingType::Str && !d.secret) {
+        getStr(SettingKey(i), v, sizeof v);
+    } else {
+        formatSettingForOutput(d, s_cache[i], v, sizeof v);   // secret → "***"
+    }
     snprintf(line, sizeof line, "%s=%s", d.key, v);
     r.line(line);
 }

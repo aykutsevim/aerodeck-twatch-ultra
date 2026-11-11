@@ -57,9 +57,12 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 
 ## Using the watch
 
-- **First use:** set the clock (until S2 adds network time). The watch keeps **UTC**; local time = UTC + the
-  "Local offset" setting (default +3:00):
-  `ad time set 2026-11-11T09:24:00Z` (current UTC). Until then the PFD shows `--` and a CLOCK NOT SET caution.
+- **First use: connect Wi-Fi** so the watch sets its own time. Go to Settings → **Set up Wi-Fi**. The watch shows a QR
+  code and a one-time code; scan it with your phone camera (or join `AeroDeck-XXXX` with the code). The setup page
+  opens; pick your network, enter its password and Save. The watch then syncs UTC at boot and every hour (Wi-Fi is
+  off between syncs). Developers can also use `ad wifi set "<ssid>" "<password>"` over USB.
+- **Time zone:** Settings → Time zone (named zones with summer time; default Istanbul). ZULU always shows UTC.
+- **No network?** `ad time set 2026-11-11T09:24:00Z` (UTC) still works as a fallback.
 - **Swipe left/right** to move through the page ring: PFD → Page A → Page B → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
@@ -82,14 +85,20 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad log <error\|warn\|info\|debug>` | Diagnostic level (persisted) |
 | `ad stat` | FPS and free heap/PSRAM |
 | `ad nav <next\|prev\|button>` | Test hook: navigate as if swiping or pressing the button |
-| `ad time` · `ad time set <YYYY-MM-DDTHH:MM:SSZ>` | Show / set the UTC clock (kept in the RTC) |
+| `ad time` · `ad time set <YYYY-MM-DDTHH:MM:SSZ>` | Show / set the UTC clock (kept in the RTC; offline fallback) |
+| `ad wifi` · `ad wifi set "<ssid>" "<psk>"` · `ad wifi forget` · `ad wifi test` · `ad wifi scan` | Wi-Fi status and credentials (the password is never printed) |
+| `ad wifi setup` · `ad wifi setup stop` | Start/stop the phone setup hotspot (the code is shown on the watch only) |
+| `ad sync` | Sync time now |
+| `ad tz` · `ad tz list [filter]` · `ad tz set <name\|index>` | Time zone |
+| `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
 | `ad att sweep <on\|off>` | Test hook: synthetic horizon motion for FPS measurement |
 | `ad fuel` · `ad fuel sim <pct\|off>` | EICAS values · test hook overriding battery % (LOW FUEL testing) |
 | `ad reboot` | Restart |
 
 Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md) ·
-[S1 additions](specs/002-pfd-watch-face/contracts/serial_commands.md).
+[S1 additions](specs/002-pfd-watch-face/contracts/serial_commands.md) ·
+[S2 additions](specs/003-time-sync/contracts/serial_commands.md).
 
 ## Project layout
 

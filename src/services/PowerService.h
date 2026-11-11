@@ -31,6 +31,9 @@ namespace PowerService {
 void begin();   // forces optional rails off; registers the svc tick
 const Snapshot<PowerSnapshot>& power();
 uint8_t refcount(core::Rail r);
+// S2: a rail that is not a PMU output (Wi-Fi) is switched by its owner's hook instead of IBoard::setRail.
+using RailHook = void (*)(bool on);
+void setRailHook(core::Rail r, RailHook fn);
 // Re-applies OFF to every optional rail with no lease (e.g. after vendor init powered them).
 void enforceIdleRails();
 void tick(uint32_t nowMs);

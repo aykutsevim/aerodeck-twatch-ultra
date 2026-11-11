@@ -19,6 +19,26 @@ int CommandParser::tokenize(char* line, const char** argv, int max)
         if (n >= max) {
             return max + 1;
         }
+        if (*p == '"') {
+            // Quoted token (S2): may contain spaces; \" and \\ are escapes. Compacted in place.
+            char* w = ++p;
+            argv[n++] = w;
+            while (*p && *p != '"') {
+                if (*p == '\\' && (p[1] == '"' || p[1] == '\\')) {
+                    p++;
+                }
+                *w++ = *p++;
+            }
+            if (*p != '"') {
+                return kUnterminatedQuote;
+            }
+            *w = '\0';
+            p++;   // past the closing quote
+            if (*p && !isSep(*p)) {
+                return kUnterminatedQuote;   // junk glued to a closing quote
+            }
+            continue;
+        }
         argv[n++] = p;
         while (*p && !isSep(*p)) {
             p++;
@@ -69,6 +89,10 @@ bool CommandParser::dispatch(const char* line, Reply& reply) const
     strcpy(buf, line);
     const char* argv[kMaxTokens];
     int argc = tokenize(buf, argv, kMaxTokens);
+    if (argc == kUnterminatedQuote) {
+        reply.err("unterminated quote");
+        return false;
+    }
     if (argc > kMaxTokens) {
         reply.err("too many arguments");
         return false;

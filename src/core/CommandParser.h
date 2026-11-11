@@ -20,7 +20,7 @@ class CommandParser {
 public:
     static constexpr size_t kMaxLine = 128;
     static constexpr int kMaxTokens = 12;   // "ad simfail" + 8 names + headroom
-    static constexpr size_t kMaxCommands = 32;
+    static constexpr size_t kMaxCommands = 48;
 
     // pattern: space-separated tokens after "ad", e.g. "set list".
     bool add(const char* pattern, uint8_t minArgs, Handler fn);
@@ -31,7 +31,9 @@ public:
     size_t count() const { return n_; }
     const char* pattern(size_t i) const { return i < n_ ? cmds_[i].pattern : nullptr; }
 
-    // Splits in place on spaces/tabs/CR/LF. Returns token count (≤ max) or max+1 if there are more.
+    static constexpr int kUnterminatedQuote = -1;
+    // Splits in place on spaces/tabs/CR/LF; "double-quoted" tokens may contain spaces (\" and \ escapes).
+    // Returns token count (≤ max), max+1 if there are more, or kUnterminatedQuote.
     static int tokenize(char* line, const char** argv, int max);
 
 private:

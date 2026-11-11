@@ -119,7 +119,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `Log` | S0 | Levelled serial logging, no secrets | — |
 | `AttitudeService` | S1 | IMU sampling, complementary filter, level lock detection, peak-g | `AttitudeSnapshot` |
 | `TimeService` | S2 | RTC↔system clock, TZ, sync scheduling, last-sync age | `TimeSnapshot` |
-| `NetService` | S2 | Wi-Fi lease, connect with timeout, SNTP, HTTPS client, provisioning (serial cmd / captive portal) | — |
+| `NetService` | S2 | `net` task (core 0) with a command queue; Wi-Fi via `RailLease(Rail::Wifi)` through `PowerService` (switch hook); STA connect with classified failures; minimal SNTP client (`core::Ntp`); `core::SyncSchedule` (boot, interval, backoff); TIME UNSYNC; `SetupPortal` (SoftAP + DNS captive portal + WebServer, one-time code, 5-min session); ADR-012 | `NetStatus` snapshot, `NetStatusChanged` |
 | `WeatherService` | S3 | METAR fetch + parse, staleness | `WeatherSnapshot`, `WeatherUpdated` |
 | `AlertManager` | S4 | Raise/clear/ack, priority arbitration (`alert_arbiter`), haptic/audio mapping table | `AlertRaised/Cleared` |
 | `HapticService` | S4 | DRV2605 effect & pattern sequencer, intensity | — |
@@ -138,7 +138,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 ### 7.1 Persistent storage
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
-| `SettingsStore` | NVS namespace `aerodeck` | Schema version, theme/NVG, TZ, Wi-Fi SSID/PSK, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v3 in S2), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
 | Recorder | NVS `rec` (hourly) + `RTC_DATA_ATTR` (on sleep) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
 | Assets | FAT partition `ffat` (mounted and USB-exposed by LilyGoLib, ADR-009) `/audio/*.wav` (16-bit PCM, mono, 16 kHz) | chime, master_caution, pull_up, bingo_fuel, minimums, traffic |
@@ -213,5 +213,6 @@ Each slice's spec-kit `tasks.md` shall include its acceptance scenarios as on-de
 | ADR-009 | Assets on LilyGoLib's FAT `ffat` partition, not LittleFS (`docs/adr/009-…`). | LilyGoLib already mounts FAT and exposes it over USB. |
 | ADR-010 | Attitude from the BHI260AP gravity virtual sensor on the UI task; no attitude task (`docs/adr/010-…`). | On-chip fusion, 100 Hz, measured latency ≤44 ms. |
 | ADR-011 | Custom-drawn horizon, ≈238 px cap, 1° heading steps (`docs/adr/011-…`). | Pipeline ceiling ~34 FPS at 280 px; median 30 FPS achieved. |
+| ADR-012 | The SoC Wi-Fi/IP stack is a platform service: allowed only in `src/services/`; power via `PowerService` `Rail::Wifi` (`docs/adr/012-…`). | Identical on every board; an `IBoard` wrapper would have one implementation. |
 
 New ADRs are appended in `docs/adr/NNN-title.md` by the slice that makes the decision.

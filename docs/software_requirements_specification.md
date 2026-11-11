@@ -114,13 +114,14 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | :--- | :--- | :--- |
 | FR-TIM-001 | M | The system clock shall start from the hardware RTC on boot and wake. |
 | FR-TIM-002 | M | With Wi-Fi credentials set, the system shall sync time by NTP at boot, then every 60 min (configurable), and write the result back to the RTC. |
-| FR-TIM-003 | M | Local time shall come from a user-configured POSIX TZ string (default `<+03>-3` for Türkiye). *Interim (S1 until S2):* local time = UTC + a fixed `tzoff` offset in minutes (−12:00…+14:00, 30-min steps, default +3:00), editable on the Settings page. |
+| FR-TIM-003 | M | Local time shall follow a user-selected **named time zone** with its summer-time rules (built-in table of ≥40 zones covering every UTC offset in use, POSIX TZ rules; default Istanbul, UTC+3). ZULU always shows UTC. *(S2: replaces the S1 interim fixed `tzoff` offset, which is migrated to an equivalent zone.)* |
 | FR-TIM-004 | S | The UI shall show the time since the last successful sync and a "TIME UNSYNC" ADVISORY when it exceeds 24 h. |
 | FR-TIM-005 | C | When Wi-Fi is unavailable, the system may set the RTC from GNSS time. |
 | FR-TIM-006 | M | If the RTC lost its time (clock integrity not guaranteed) or holds a year before 2025, all time readouts shall show "--" and a **CLOCK NOT SET** caution shall be raised. *(Added in S1.)* |
-| FR-TIM-007 | M | *Interim until NTP (S2):* the UTC clock shall be settable via the diagnostic serial console (`ad time set`) and kept in the RTC across reboots. *(Added in S1.)* |
+| FR-TIM-007 | M | The UTC clock shall remain settable via the diagnostic serial console (`ad time set`) as a **fallback when no network is available**, and kept in the RTC across reboots. *(Added in S1; role changed in S2.)* |
 | FR-NET-001 | M | Wi-Fi shall be on only during a sync/fetch transaction and turned off afterwards (no persistent association). |
 | FR-NET-002 | M | A network transaction shall time out after ≤15 s and shall never block UI rendering. |
+| FR-NET-003 | M | The phone setup hotspot (Wi-Fi provisioning) shall start only on a deliberate action on the watch, be protected by a one-time access code shown only on the watch, close after ≤5 min or when credentials are saved or setup is cancelled, and never overlap a sync transaction. *(Added in S2.)* |
 
 ### 3.4 METAR weather page (WX)
 | ID | Pri | Requirement |
@@ -286,7 +287,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | :--- | :--- | :--- |
 | S0 | Platform foundation | FR-PLT-001…008, NFR-REL-001…003, NFR-MNT-001…003, NFR-PERF-003/005, NFR-PWR-001 |
 | S1 | PFD watch face | FR-PFD-001…009, FR-PFD-011, FR-TIM-003 (interim), FR-TIM-006, FR-TIM-007, NFR-PERF-001/002, NFR-USE-002 |
-| S2 | Time sync & connectivity | FR-TIM-001…005, FR-NET-001/002, NFR-SEC-001 |
+| S2 | Time sync & connectivity | FR-TIM-001…004, FR-TIM-003 (named zones), FR-TIM-006, FR-TIM-007 (fallback), FR-NET-001…003, NFR-SEC-001 |
 | S3 | METAR weather page | FR-WX-001…005, NFR-SEC-002, NFR-MNT-004 |
 | S4 | Alert Manager & haptics | FR-ALR-001…004, FR-HAP-001…003 |
 | S5 | GPWS audio | FR-AUD-001…005, NFR-PWR-003 |
