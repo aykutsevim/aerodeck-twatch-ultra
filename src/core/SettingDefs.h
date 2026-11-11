@@ -6,7 +6,7 @@
 namespace core {
 
 enum class SettingType : uint8_t { Bool, U8, U16, I32 };
-enum class SettingKey : uint8_t { Bright, Overlay, LogLvl, SimFail, Count };
+enum class SettingKey : uint8_t { Bright, Overlay, LogLvl, SimFail, TzOff, Count };
 
 struct SettingDef {
     const char* key;   // NVS key, ≤15 chars
@@ -14,11 +14,12 @@ struct SettingDef {
     int32_t def;
     int32_t min;
     int32_t max;
+    int32_t step;      // 0 = any value in range; otherwise (v - min) % step == 0
     bool secret;       // never logged or displayed (FR-013)
     bool editable;     // shown on the Settings page
 };
 
-constexpr uint16_t kSchemaVersion = 1;
+constexpr uint16_t kSchemaVersion = 2;   // v2 (S1): + tzoff
 constexpr const char* kSchemaKey = "schema";
 constexpr const char* kNamespace = "aerodeck";
 

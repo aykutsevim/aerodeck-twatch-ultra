@@ -12,6 +12,8 @@ enum class EventType : uint16_t {
     PowerSnapshotUpdated,
     PeriphStatusChanged,      // deferred probe finished
     NavCommand,               // a = 0 next, 1 prev, 2 button (serial test hook `ad nav`)
+    AttitudeStatusChanged,    // S1: Align → Ok/Fail
+    ClockChanged,             // S1: clock set via serial
 };
 
 struct Event {

@@ -6,9 +6,10 @@
 #include <lvgl.h>
 #include "board/IBoard.h"
 #include "core/BootGuard.h"
-#include "pages/HomePage.h"
+#include "pages/PfdPage.h"
 #include "pages/PlaceholderPage.h"
 #include "pages/SettingsPage.h"
+#include "services/AttitudeService.h"
 #include "services/BoardCommands.h"
 #include "services/Cautions.h"
 #include "services/EventBus.h"
@@ -17,6 +18,7 @@
 #include "services/SerialConsole.h"
 #include "services/SettingsStore.h"
 #include "services/SvcTask.h"
+#include "services/TimeService.h"
 #include "ui/CautionBanner.h"
 #include "ui/DebugOverlay.h"
 #include "ui/PageManager.h"
@@ -32,7 +34,7 @@ static uint32_t g_lastFatalMs;
 static bool g_stable;
 static QueueHandle_t g_uiQueue;
 
-static HomePage g_home;
+static PfdPage g_home;
 static PlaceholderPage g_pageA(PageId::PlaceholderA, "PAGE A");
 static PlaceholderPage g_pageB(PageId::PlaceholderB, "PAGE B");
 static SettingsPage g_settings;
@@ -107,6 +109,7 @@ static void deferredProbeTask(void*)
 {
     uint32_t t0 = millis();
     board().probeDeferred();
+    AttitudeService::onImuReady(board().periph(Periph::Imu) == PeriphState::Ok);
     PowerService::enforceIdleRails();
     raisePeriphCautions();
     EventBus::publish(EventType::PeriphStatusChanged);
@@ -147,6 +150,7 @@ void setup()
     SettingsStore::registerCommands();
     BoardCommands::registerCommands();
     DebugOverlay::registerCommands();
+    PowerService::registerCommands();
     SerialConsole::add("nav", 1, cmdNav);
     SvcTask::addTick(SettingsStore::tick);
 
@@ -176,8 +180,12 @@ void setup()
     g_ui = true;
     BootGuard::mark(g_boot, BootStage::UiInit);
     Theme::begin(board().display());
+    TimeService::begin();
+    AttitudeService::begin();
     PowerService::begin();
     SvcTask::addTick(PowerService::tick);
+    SvcTask::addTick(TimeService::tick);
+    SvcTask::addTick(AttitudeService::tick);
     SvcTask::begin();
 
     g_uiQueue = EventBus::subscribe(16);

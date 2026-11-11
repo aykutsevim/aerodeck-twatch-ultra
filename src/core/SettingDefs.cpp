@@ -5,11 +5,12 @@
 namespace core {
 
 static const SettingDef kDefs[] = {
-    //  key        type               def min max   secret editable
-    {"bright", SettingType::U8, 3, 0, 4, false, true},       // 5 steps → 20..100 %
-    {"overlay", SettingType::Bool, 0, 0, 1, false, true},    // diagnostics overlay
-    {"loglvl", SettingType::U8, 2, 0, 3, false, true},       // 0 E,1 W,2 I,3 D
-    {"simfail", SettingType::U16, 0, 0, 0xFF, false, false}, // simulated failures (serial only)
+    //  key        type                def   min   max  step secret editable
+    {"bright", SettingType::U8, 3, 0, 4, 0, false, true},        // 5 steps → 20..100 %
+    {"overlay", SettingType::Bool, 0, 0, 1, 0, false, true},     // diagnostics overlay
+    {"loglvl", SettingType::U8, 2, 0, 3, 0, false, true},        // 0 E,1 W,2 I,3 D
+    {"simfail", SettingType::U16, 0, 0, 0xFF, 0, false, false},  // simulated failures (serial only)
+    {"tzoff", SettingType::I32, 180, -720, 840, 30, false, true}, // S1: local = UTC + tzoff minutes
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 
@@ -24,7 +25,10 @@ const SettingDef& settingDef(SettingKey k)
 bool validateSetting(SettingKey k, int32_t v)
 {
     const SettingDef& d = settingDef(k);
-    return v >= d.min && v <= d.max;
+    if (v < d.min || v > d.max) {
+        return false;
+    }
+    return d.step <= 0 || (v - d.min) % d.step == 0;
 }
 
 int32_t sanitizeSetting(SettingKey k, int32_t stored, bool present)

@@ -37,7 +37,7 @@ reserved for later assets (ADR-009).
 
 **Testing**: PlatformIO Unity on `env:native` for `src/core/`. On-device acceptance per quickstart.md.
 
-**Target Platform**: LilyGO T-Watch Ultra (ESP32-S3, 16 MB flash, 8 MB PSRAM, 502×410 AMOLED).
+**Target Platform**: LilyGO T-Watch Ultra (ESP32-S3, 16 MB flash, 8 MB PSRAM, 410×502 portrait AMOLED; *corrected in S1: earlier written as 502×410*).
 T-Watch S3 compile-only.
 
 **Project Type**: Embedded firmware (single PlatformIO project).

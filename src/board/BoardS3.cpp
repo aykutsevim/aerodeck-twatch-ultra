@@ -20,6 +20,26 @@ public:
     void onStage(StageCb cb) override { stageCb_ = cb; }
     void probeDeferred() override {}   // S3 probes everything in begin()
 
+    // BMA423 has no fusion output; the PFD shows ATT FAIL on the S3 (accelerometer fallback out of scope).
+    bool configureAttitude(float, GravityCb, void*) override { return false; }
+
+    bool readRtc(std::tm& utc, bool& integrity) override
+    {
+        if (periph(Periph::Rtc) != PeriphState::Ok) return false;
+        I2cLock lock;
+        utc = instance.rtc.getDateTime().toUnixTime();
+        integrity = instance.rtc.isClockIntegrityGuaranteed();
+        return true;
+    }
+
+    bool writeRtc(const std::tm& utc) override
+    {
+        if (periph(Periph::Rtc) != PeriphState::Ok) return false;
+        I2cLock lock;
+        instance.rtc.setDateTime(RTC_DateTime(utc));
+        return true;
+    }
+
     BootResult begin(uint16_t simFailMask, bool safeMode, bool headless) override
     {
         BootResult r{true, safeMode, 0};
@@ -70,7 +90,7 @@ public:
         return Cap::Lora | Cap::Haptics | Cap::Speaker | Cap::Mic | Cap::IrTx | Cap::ImuStepCounter;
     }
     const char* name() const override { return "T-Watch S3"; }
-    DisplayInfo display() const override { return DisplayInfo{uint16_t(DISP_WIDTH), uint16_t(DISP_HEIGHT), false}; }
+    DisplayInfo display() const override { return DisplayInfo{instance.width(), instance.height(), false, 0}; }
 
     void setBrightnessPct(uint8_t pct) override
     {

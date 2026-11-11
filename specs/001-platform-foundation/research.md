@@ -128,7 +128,7 @@ amended in this branch).
 ## R7. Display buffers & memory budget (FR-018, NFR-PERF-005)
 
 **Finding**: `beginLvglHelper()` with DMA enabled allocates **two internal DMA buffers** of
-`502×410/6×2 B ≈ 68.6 KB` each (≈137 KB internal RAM). Without DMA it uses two full-frame PSRAM
+`410×502/6×2 B ≈ 68.6 KB` each (same pixel count in either orientation) (≈137 KB internal RAM). Without DMA it uses two full-frame PSRAM
 buffers (~412 KB each). LVGL heap is `LV_STDLIB_CUSTOM` (LilyGoLib's `lv_conf.h`).
 `LV_DEF_REFR_PERIOD = 33 ms` (≈30 FPS cap). `LV_USE_OS = LV_OS_NONE`.
 

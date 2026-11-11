@@ -60,7 +60,7 @@ Sizes: S ≈ 2–4 dev-days, M ≈ 1 week, L ≈ 2 weeks (hobby pace, adjust as 
 ## 5. Hardware deltas vs. concept spec (decisions already taken)
 | Concept spec item | Roadmap decision |
 | :--- | :--- |
-| T-Watch S3, 240×240 LCD | Primary target is the T-Watch Ultra, 502×410 AMOLED. Resolution-independent UI keeps S3 viable. |
+| T-Watch S3, 240×240 LCD | Primary target is the T-Watch Ultra, 410×502 AMOLED. Resolution-independent UI keeps S3 viable. |
 | LVGL 8.3 | LVGL 9.4 (already pinned). |
 | BMA423 / PCF8563 | BHI260AP / PCF85063A behind the HAL. |
 | IR LED countermeasures | The Ultra has no IR LED, so the Ultra uses NFC for IFF (S11). IR remains for S3 builds. |
@@ -71,7 +71,7 @@ Sizes: S ≈ 2–4 dev-days, M ≈ 1 week, L ≈ 2 weeks (hobby pace, adjust as 
 ## 6. Risks
 | Risk | Likelihood | Impact | Mitigation |
 | :--- | :---: | :---: | :--- |
-| Horizon too slow at 502×410 | Med | High | Measure early in S1. Transform-based rendering, partial invalidation, canvas fallback. |
+| Horizon too slow at 410×502 | Med | High | Measure early in S1. Transform-based rendering, partial invalidation, canvas fallback. |
 | LilyGoLib/IDF 4.4 incompatibilities beyond the known patch | Med | Med | S0 automates patching. Arduino 3.x migration slice as plan B. |
 | Deep-sleep wake from IMU unsupported on Ultra wiring | Med | Low | Button + timer wake fallback (SRS OI-1). |
 | LoRa duty-cycle limits make TCAS sluggish | Med | Low | 30–60 s beacons, RSSI smoothing. Beacons are tiny. |

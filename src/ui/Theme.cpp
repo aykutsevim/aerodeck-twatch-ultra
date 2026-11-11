@@ -4,6 +4,7 @@ namespace Theme {
 
 static float s_scale = 1.0f;
 static int32_t s_w = 240, s_h = 240;
+static int32_t s_cornerR = 0;
 static lv_style_t s_screen, s_title, s_body, s_button, s_banner;
 static const lv_font_t *s_small, *s_bodyFont, *s_titleFont, *s_huge;
 
@@ -25,6 +26,7 @@ void begin(const core::DisplayInfo& d)
 {
     s_w = d.w;
     s_h = d.h;
+    s_cornerR = d.cornerR;
     int32_t m = d.w < d.h ? d.w : d.h;
     s_scale = m / 240.0f;
 
@@ -69,6 +71,7 @@ void begin(const core::DisplayInfo& d)
 float scale() { return s_scale; }
 int32_t width() { return s_w; }
 int32_t height() { return s_h; }
+int32_t cornerRadius() { return s_cornerR; }
 
 lv_color_t bg() { return lv_color_black(); }
 lv_color_t fg() { return lv_color_hex(0xE8E8E8); }

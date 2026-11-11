@@ -25,7 +25,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | Concern | Concept spec (T-Watch S3) | **Primary target (T-Watch Ultra)** | Requirement impact |
 | :--- | :--- | :--- | :--- |
 | MCU | ESP32-S3, 8 MB PSRAM | ESP32-S3, 16 MB flash, 8 MB QSPI PSRAM | None |
-| Display | 240×240 ST7789V LCD (backlight PWM) | **502×410 AMOLED over QSPI** (brightness 0–255) | Layout is resolution-independent; "backlight" means panel brightness; true black saves power |
+| Display | 240×240 ST7789V LCD (backlight PWM) | **410×502 AMOLED over QSPI** (410 wide × 502 tall, portrait; the panel is 502×410 before LilyGoLib's default rotation; **rounded corners, radius 64 px**) (brightness 0–255) | Layout is resolution-independent; "backlight" means panel brightness; true black saves power |
 | Touch | FT6336U | CST9217 | Abstracted |
 | IMU | BMA423 (accel, step counter) | **BHI260AP** smart sensor hub (accel/gyro, virtual sensors) | Better attitude data; step/tilt via virtual sensors |
 | RTC | PCF8563 | **PCF85063A** | Abstracted |
@@ -103,19 +103,22 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | FR-PFD-004 | M | A right vertical tape ("altitude") shall show **minutes 00–59** in the same style. |
 | FR-PFD-005 | M | A top heading tape shall show **seconds** as compass degrees (1 s = 6°, 0–354°), scrolling smoothly between seconds. |
 | FR-PFD-006 | M | The bottom corners shall show **ZULU (UTC)** and **LOCAL** time as HH:MM in a high-contrast HUD style. |
-| FR-PFD-007 | M | An EICAS strip shall show **FUEL QTY %** (battery %), **FUEL FLOW** (battery current in mA, signed; charging shown distinctly), and **EGT** (PMIC die temperature in °C). It shall refresh at ≥1 Hz. |
+| FR-PFD-007 | M | An EICAS strip shall show **FUEL QTY %** (battery %), **FUEL FLOW** (battery **drain rate in %/h**, estimated from the battery-percentage trend over ≥10 min; "--" until enough history exists, a refuel indication while charging), and **EGT** (PMIC die temperature in °C). It shall refresh at ≥1 Hz. *(Amended in S1: the AXP2101 has no battery-current ADC, so mA cannot be measured.)* |
 | FR-PFD-008 | S | The PFD shall show **Max G** (today's peak) and **Flight Miles** (today's NM), sourced from FR-REC. |
 | FR-PFD-009 | S | The PFD shall show a charging annunciator and a low-battery CAUTION annunciator, driven by the Alert Manager. |
 | FR-PFD-010 | C | If GNSS has a fix, the heading tape may optionally show true course over ground (user setting). Seconds then move to a numeric readout. |
+| FR-PFD-011 | M | While the attitude reference is initialising, the ADI shall show **ATT ALIGN**. If motion sensing is unavailable it shall show a level picture with **ATT FAIL**, and every other PFD function shall keep working. *(Added in S1.)* |
 
 ### 3.3 Time & connectivity (TIM / NET)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
 | FR-TIM-001 | M | The system clock shall start from the hardware RTC on boot and wake. |
 | FR-TIM-002 | M | With Wi-Fi credentials set, the system shall sync time by NTP at boot, then every 60 min (configurable), and write the result back to the RTC. |
-| FR-TIM-003 | M | Local time shall come from a user-configured POSIX TZ string (default `<+03>-3` for Türkiye). |
+| FR-TIM-003 | M | Local time shall come from a user-configured POSIX TZ string (default `<+03>-3` for Türkiye). *Interim (S1 until S2):* local time = UTC + a fixed `tzoff` offset in minutes (−12:00…+14:00, 30-min steps, default +3:00), editable on the Settings page. |
 | FR-TIM-004 | S | The UI shall show the time since the last successful sync and a "TIME UNSYNC" ADVISORY when it exceeds 24 h. |
 | FR-TIM-005 | C | When Wi-Fi is unavailable, the system may set the RTC from GNSS time. |
+| FR-TIM-006 | M | If the RTC lost its time (clock integrity not guaranteed) or holds a year before 2025, all time readouts shall show "--" and a **CLOCK NOT SET** caution shall be raised. *(Added in S1.)* |
+| FR-TIM-007 | M | *Interim until NTP (S2):* the UTC clock shall be settable via the diagnostic serial console (`ad time set`) and kept in the RTC across reboots. *(Added in S1.)* |
 | FR-NET-001 | M | Wi-Fi shall be on only during a sync/fetch transaction and turned off afterwards (no persistent association). |
 | FR-NET-002 | M | A network transaction shall time out after ≤15 s and shall never block UI rendering. |
 
@@ -217,7 +220,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 4.1 Performance (PERF)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| NFR-PERF-001 | M | The PFD horizon shall render at a sustained **≥30 FPS** on the Ultra (502×410). The goal is 60 FPS where measured headroom allows. Frame time shall be measurable via a debug overlay. |
+| NFR-PERF-001 | M | The PFD horizon shall render at a sustained **≥30 FPS** on the Ultra (410×502). The goal is 60 FPS where measured headroom allows. Frame time shall be measurable via a debug overlay. |
 | NFR-PERF-002 | M | IMU-to-display latency for the horizon shall be ≤50 ms. |
 | NFR-PERF-003 | M | No radio, network, filesystem or audio operation shall stall the UI task for more than 1 frame (33 ms). |
 | NFR-PERF-004 | M | Page transitions shall finish in ≤300 ms. |
@@ -249,7 +252,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
 | NFR-MNT-001 | M | Application code shall use the board abstraction layer only. LilyGoLib/driver types shall not appear in pages or services. |
-| NFR-MNT-002 | M | UI layout shall be resolution-independent: no hard-coded 240×240 or 502×410 coordinates outside a layout/theme module. |
+| NFR-MNT-002 | M | UI layout shall be resolution-independent: no hard-coded 240×240 or 410×502 coordinates outside a layout/theme module. Content shall stay inside the visible area of screens with rounded corners (Ultra: radius 64 px); corner-anchored elements shall be inset accordingly. *(Extended in S1.)* |
 | NFR-MNT-003 | M | `pio run -e twatch_ultra` shall build from a clean checkout with no manual steps (including the LilyGoLib patch). |
 | NFR-MNT-004 | S | Pure logic (unit conversion, METAR parsing, alert arbitration, RSSI→range mapping, beacon codec) shall have host-side unit tests (`pio test -e native`). |
 | NFR-MNT-005 | S | The T-Watch S3 build (`env:twatchs3`) shall compile, with board-specific features disabled cleanly. |
@@ -282,7 +285,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | Slice | Title | Requirements |
 | :--- | :--- | :--- |
 | S0 | Platform foundation | FR-PLT-001…008, NFR-REL-001…003, NFR-MNT-001…003, NFR-PERF-003/005, NFR-PWR-001 |
-| S1 | PFD watch face | FR-PFD-001…009, NFR-PERF-001/002, NFR-USE-002 |
+| S1 | PFD watch face | FR-PFD-001…009, FR-PFD-011, FR-TIM-003 (interim), FR-TIM-006, FR-TIM-007, NFR-PERF-001/002, NFR-USE-002 |
 | S2 | Time sync & connectivity | FR-TIM-001…005, FR-NET-001/002, NFR-SEC-001 |
 | S3 | METAR weather page | FR-WX-001…005, NFR-SEC-002, NFR-MNT-004 |
 | S4 | Alert Manager & haptics | FR-ALR-001…004, FR-HAP-001…003 |
@@ -302,7 +305,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | # | Issue | Proposed resolution |
 | :--- | :--- | :--- |
 | OI-1 | Can the BHI260AP wake the ESP32-S3 from deep sleep directly (interrupt pin routing on Ultra)? | Verify in S7. Fall back to button-only wake plus timer wake for the chronograph. |
-| OI-2 | Is 60 FPS full-horizon redraw feasible at 502×410 over QSPI? | Measure in S1. NFR-PERF-001 guarantees 30 FPS. S0 measured full-screen page transitions at 15–28 FPS with LilyGoLib's 1/6-screen DMA buffers; S1 must tune rendering (buffer size, partial invalidation, lighter styles). |
+| OI-2 | Is 60 FPS full-horizon redraw feasible at 410×502 over QSPI? | Measure in S1. NFR-PERF-001 guarantees 30 FPS. S0 measured full-screen page transitions at 15–28 FPS with LilyGoLib's 1/6-screen DMA buffers; S1 must tune rendering (buffer size, partial invalidation, lighter styles). |
 | OI-3 | On-device keyword spotting memory/CPU budget. | S10 starts with FFT acoustic gestures. Keyword spotting is a stretch goal. |
 | OI-4 | Codec2 on Arduino-ESP32 2.x build integration. | S13 is experimental and gated by a spike. |
 | OI-5 | Migrate to Arduino-ESP32 3.x (IDF 5) to drop the LilyGoLib patch? | Re-evaluate after S5. A migration would be its own slice. |

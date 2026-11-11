@@ -14,9 +14,9 @@ Checks that need a finger on the watch or a hand on the power supply are listed 
 | SC-002 | 100 swipes land on the expected page | ✅ 100/100 (via `ad nav`) · ⏳ physical swipe check | §2 |
 | SC-003 | Button → Home ≤0.5 s, 20/20 | ✅ 20/20, max 247 ms (via `ad nav button`) · ⏳ physical button | §2 |
 | SC-004 | Settings kept across 10 power cycles incl. 3 cut during save | ✅ 10/10 reboots · ⏳ 3 power-cut trials | §3 |
-| SC-005 | Each optional failure → Home + named caution; 0 resets in 1 h | ✅ all 8 + all-at-once · ⏳ 1 h soak (running) | §4 |
+| SC-005 | Each optional failure → Home + named caution; 0 resets in 1 h | ✅ all 8 + all-at-once · ✅ 60-min soak, no reset | §4, §7 |
 | SC-006 | Transitions ≤0.3 s; FPS recorded (amended; ≥30 FPS moved to S1) | ✅ max 270 ms · FPS 15–28 recorded | §2, §5 |
-| SC-007 | Heap ≥40 KB after 30 min navigation | ✅ heapmin 163,772 B (short run) · ⏳ 30-min soak | §5 |
+| SC-007 | Heap ≥40 KB after 30 min navigation | ✅ heapmin 164,172 B over 60 min | §7 |
 | SC-008 | Fresh clone builds Ultra with one command | ✅ `patched` then `already patched` | §6 |
 | SC-009 | S3 compiles; native tests pass | ✅ S3 · ✅ 5/5 suites, 39/39 tests | §6 |
 
@@ -81,7 +81,7 @@ afterwards; the normal build is flashed.
 Rails (V7): the boot log shows `rail lora/audioamp/gnss/nfc OFF (boot)`, then `idle rails enforced OFF` after the
 deferred probe.
 
-⏳ 1-hour run with `simfail lora`: see §7.
+✅ 1-hour run with `simfail lora`: see §7.
 
 ## 5. Diagnostics & performance (V6, SC-006, SC-007)
 
@@ -118,7 +118,13 @@ The Settings page (default-theme widgets) is the slowest. See "Open decisions".
 
 ## 7. Soak (SC-005 1 h, SC-007 30 min)
 
-⏳ Running: 60 min of continuous `ad nav` with `simfail lora`, sampling `ad stat`/`ad info` every 2 s.
+60 min of continuous `ad nav` (8,877 navigations) with `simfail lora`, sampling `ad stat`/`ad info` every 2 s
+(1,651 samples):
+- **No reset:** uptime went from 10 s to 3,609 s, matching the 60 min elapsed. The script's "resets detected: 5"
+  counter is a parsing artefact: replies were sometimes cut at the 0.3 s read window, so a partial number such as
+  `uptime_s=3` compared lower than the previous reading.
+- **Heap:** lowest-ever free internal heap 164,172 B (SC-007 ≥40,960 ✅).
+- **FPS** (1 s windows during constant navigation): min 2, median 20, max 29 (recorded per amended SC-006).
 
 ## Findings fixed during validation
 

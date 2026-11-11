@@ -8,6 +8,8 @@ enum class CautionId : uint8_t {
     SettingsReset = 32,
     SettingsStorageError,
     SafeMode,
+    ClockNotSet,   // S1
+    LowFuel,       // S1
 };
 
 struct Caution {

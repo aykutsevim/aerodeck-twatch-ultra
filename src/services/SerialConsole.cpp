@@ -63,6 +63,9 @@ static void cmdInfo(int, const char* const*, core::Reply& r)
     r.line(b);
     snprintf(b, sizeof b, "board=%s", board().name());
     r.line(b);
+    core::DisplayInfo di = board().display();
+    snprintf(b, sizeof b, "display=%ux%u corner_r=%u", di.w, di.h, di.cornerR);
+    r.line(b);
     snprintf(b, sizeof b, "uptime_s=%lu", (unsigned long)(millis() / 1000));
     r.line(b);
     snprintf(b, sizeof b, "reset_reason=%s", resetReason());

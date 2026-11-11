@@ -14,6 +14,7 @@ private:
     lv_obj_t* brightVal_ = nullptr;
     lv_obj_t* overlaySw_ = nullptr;
     lv_obj_t* logDd_ = nullptr;
+    lv_obj_t* tzVal_ = nullptr;   // S1: local offset
     lv_obj_t* statusBox_ = nullptr;
     bool created_ = false;
 };
