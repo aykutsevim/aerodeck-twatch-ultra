@@ -8,6 +8,11 @@
 
 namespace core {
 
+// S5 audio clips (data-model §1). Files live at /audio/<name>.wav on the FAT partition (ADR-013).
+enum class Clip : uint8_t {
+    None = 0, MasterCaution, MasterWarning, Stall, PullUp, BingoFuel, Minimums, Traffic, Chime, Count
+};
+
 enum class AlertLevel : uint8_t { None = 0, Advisory = 1, Caution = 2, Warning = 3 };
 
 enum class AlertId : uint8_t {
@@ -30,7 +35,7 @@ struct AlertDef {
     AlertLevel level;
     Pattern pattern;
     uint16_t repeatMs;     // 0 = play once
-    uint8_t voiceClip;     // 0 = none (filled by S5)
+    uint8_t voiceClip;     // Clip; 0 = none → level default (calloutFor)
     const char* text;      // nullptr for peripheral ids (built by alertText)
     const char* name;      // serial name (lowercase)
 };
@@ -41,5 +46,12 @@ bool alertIdFromName(const char* name, AlertId& out);   // table name, periphera
 bool levelFromLetter(const char* s, AlertLevel& out);   // W / C / A (case-insensitive)
 const char* levelName(AlertLevel l);                     // "WARNING" "CAUTION" "ADVISORY"
 Pattern patternForLevel(AlertLevel l);
+
+const char* clipName(Clip c);   // "master_caution" ...; nullptr for None/Count
+const char* clipFile(Clip c);   // "master_caution.wav" ...; nullptr for None/Count
+bool clipFromName(const char* name, Clip& out);
+// FR-005: Advisory → None; otherwise the alert's own clip; otherwise Caution → MasterCaution,
+// Warning → MasterWarning.
+Clip calloutFor(AlertId id, AlertLevel level);
 
 } // namespace core

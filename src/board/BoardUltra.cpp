@@ -68,6 +68,7 @@ public:
         stage(BootStage::VendorInit);   // note: LilyGoLib also brings up the panel in here
         instance.setDisplayParams(true, false);   // DMA partial refresh: measured fastest (validation.md, R7)
         probe_ = instance.begin(flags);
+        audioReady_ = !(flags & NO_HW_MIC);   // initAmplifier() ran (Player I2S installed)
         vendorOk_ = true;
 
         stage(BootStage::DisplayInit);
@@ -145,6 +146,34 @@ public:
         instance.drv.setWaveform(n, 0);
         instance.drv.run();
         return true;
+    }
+
+    // S5: speaker via LilyGoLib's Player (I2S port PLAYER_IS2_PORT, installed by initAmplifier() at boot).
+    bool audioBegin(uint32_t rateHz) override
+    {
+        if (periph(Periph::Speaker) != PeriphState::Ok || !audioReady_) {
+            return false;
+        }
+        if (!instance.player.configureTX(rateHz, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO)) {
+            return false;
+        }
+        i2s_zero_dma_buffer(PLAYER_IS2_PORT);
+        return true;
+    }
+
+    size_t audioWrite(const int16_t* s, size_t n) override
+    {
+        if (!audioReady_ || !s || n == 0) {
+            return 0;
+        }
+        return instance.player.write((void*)s, n * sizeof(int16_t)) / sizeof(int16_t);
+    }
+
+    void audioEnd() override
+    {
+        if (audioReady_) {
+            i2s_zero_dma_buffer(PLAYER_IS2_PORT);
+        }
     }
 
     void hapticStop() override
@@ -385,6 +414,7 @@ private:
     bool vendorOk_ = false;
     bool displayOk_ = false;
     bool lvgl_ = false;
+    bool audioReady_ = false;   // S5: Player I2S driver installed
     StageCb stageCb_ = nullptr;
     GravityCb gravityCb_ = nullptr;
     void* gravityCtx_ = nullptr;

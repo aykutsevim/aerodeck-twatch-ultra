@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <freertos/FreeRTOS.h>
+#include "services/AudioService.h"
 #include "services/EventBus.h"
 #include "services/HapticService.h"
 #include "services/Log.h"
@@ -24,6 +25,8 @@ uint32_t s_seq;
 volatile uint8_t s_pendingPattern;         // core::Pattern to play on the next tick (highest wins)
 uint32_t s_lastShakerMs;
 bool s_shakerArmed;                        // an unacked WARNING exists (repeat runs)
+uint8_t s_shakerCycles;                    // S5: shaker repeats since the last (re)start; callout every 3rd
+constexpr uint8_t kCalloutEveryCycles = 3; // 3 x 2 s = ~6 s (FR-006)
 
 void publishLocked()   // s_lock held
 {
@@ -32,6 +35,16 @@ void publishLocked()   // s_lock held
     s_tmp.anyUnacked = s_set.anyUnacked();
     s_tmp.seq = ++s_seq;
     s_snap.write(s_tmp);
+}
+
+// S5: the voice callout for a raise / re-arm / repeat (FR-005, FR-006). Non-blocking: only queues.
+void callout(AlertId id, AlertLevel level)
+{
+    const core::Clip c = core::calloutFor(id, level);
+    if (c == core::Clip::None) {
+        return;
+    }
+    AudioService::play(c, level == AlertLevel::Warning ? core::SoundPrio::Warning : core::SoundPrio::Caution);
 }
 
 void requestPattern(core::Pattern p)
@@ -65,6 +78,7 @@ RaiseResult doRaise(AlertId id, AlertLevel level, const char* text, bool acked)
             requestPattern(level == AlertLevel::Warning ? core::Pattern::StickShaker
                            : d && d->level == level  ? d->pattern
                                                      : core::patternForLevel(level));
+            callout(id, level);
         }
         EventBus::publish(EventType::AlertRaised, uint32_t(id));
         break;
@@ -203,6 +217,7 @@ uint8_t ackAll()
     if (n) {
         s_pendingPattern = 0;
         HapticService::stopWarning();   // FR-007: repeating vibration stops now
+        AudioService::stopAlerts();     // S5 FR-007: callout in progress cut, repeats cancelled
         LOGI("alert", "ack %u", unsigned(n));
         EventBus::publish(EventType::AlertAcked, n);
     }
@@ -219,11 +234,23 @@ void tick(uint32_t now)
     if (p == uint8_t(core::Pattern::StickShaker) || (armed && !s_shakerArmed)) {
         HapticService::play(core::Pattern::StickShaker);
         s_lastShakerMs = now;
+        s_shakerCycles = 0;   // (re)started by a raise / re-arm: the first voice repeat comes ~6 s later
     } else if (p) {
         HapticService::play(core::Pattern(p));
     } else if (armed && now - s_lastShakerMs >= 2000) {
         HapticService::play(core::Pattern::StickShaker);   // repeat until acknowledged (FR-012)
         s_lastShakerMs = now;
+        if (++s_shakerCycles >= kCalloutEveryCycles) {
+            s_shakerCycles = 0;
+            // re-queue the callout of the master (first) unacknowledged WARNING
+            const AlertSnapshot snap = s_snap.read();
+            for (uint8_t i = 0; i < snap.n; i++) {
+                if (!snap.items[i].acked && snap.items[i].level == AlertLevel::Warning) {
+                    callout(snap.items[i].id, AlertLevel::Warning);
+                    break;
+                }
+            }
+        }
     }
     s_shakerArmed = armed;
 }

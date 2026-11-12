@@ -42,6 +42,13 @@ public:
     // S4: DRV2605 sequence (<= 7 entries: ROM effect ids, 0x80|n = wait n x 10 ms). False if haptics unavailable.
     virtual bool haptic(const uint8_t* seq, uint8_t n) = 0;
     virtual void hapticStop() = 0;
+    // S5: I2S speaker output through LilyGoLib's Player (legacy driver installed at boot). Audio task only.
+    // audioBegin: set the clock for 16-bit mono at rateHz and clear the DMA buffers; false if no speaker.
+    // audioWrite: blocks until the DMA accepted all n samples; returns the samples written.
+    // audioEnd: zero the DMA buffers so no stale samples replay.
+    virtual bool audioBegin(uint32_t rateHz) = 0;
+    virtual size_t audioWrite(const int16_t* s, size_t n) = 0;
+    virtual void audioEnd() = 0;
     virtual ~IBoard() = default;
 };
 
