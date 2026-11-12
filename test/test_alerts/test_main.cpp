@@ -1,5 +1,6 @@
 // core::AlertSet + core::Alerts table (S4 data-model §1–2, spec FR-001..FR-003, FR-008, SC-002).
 #include <unity.h>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include "core/AlertSet.h"
@@ -183,6 +184,45 @@ static void test_names()
     TEST_ASSERT_FALSE(levelFromLetter("X", l));
 }
 
+// S5: callout mapping (data-model §1, FR-005) and clip names.
+static void test_callout_for()
+{
+    TEST_ASSERT_EQUAL(int(Clip::Stall), int(calloutFor(AlertId::Stall, AlertLevel::Warning)));
+    TEST_ASSERT_EQUAL(int(Clip::PullUp), int(calloutFor(AlertId::PullUp, AlertLevel::Warning)));
+    TEST_ASSERT_EQUAL(int(Clip::Minimums), int(calloutFor(AlertId::Test1, AlertLevel::Caution)));
+    TEST_ASSERT_EQUAL(int(Clip::Minimums), int(calloutFor(AlertId::Test2, AlertLevel::Warning)));
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::Test1, AlertLevel::Advisory)));   // Advisory first
+    TEST_ASSERT_EQUAL(int(Clip::MasterCaution), int(calloutFor(AlertId::ClockNotSet, AlertLevel::Caution)));
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::TimeUnsync, AlertLevel::Advisory)));
+    TEST_ASSERT_EQUAL(int(Clip::MasterCaution),
+                      int(calloutFor(AlertId(uint8_t(Periph::Imu)), AlertLevel::Caution)));   // IMU FAIL
+    TEST_ASSERT_EQUAL(int(Clip::MasterWarning), int(calloutFor(AlertId::SafeMode, AlertLevel::Warning)));
+    TEST_ASSERT_EQUAL(int(Clip::MasterWarning), int(calloutFor(AlertId(200), AlertLevel::Warning)));   // unknown
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::Stall, AlertLevel::None)));
+}
+
+static void test_clip_names()
+{
+    const char* names[8] = {"master_caution", "master_warning", "stall", "pull_up",
+                            "bingo_fuel", "minimums", "traffic", "chime"};
+    for (int i = 0; i < 8; i++) {
+        Clip c = Clip(i + 1);
+        TEST_ASSERT_EQUAL_STRING(names[i], clipName(c));
+        char f[32];
+        snprintf(f, sizeof(f), "%s.wav", names[i]);
+        TEST_ASSERT_EQUAL_STRING(f, clipFile(c));
+        Clip back = Clip::None;
+        TEST_ASSERT_TRUE(clipFromName(names[i], back));
+        TEST_ASSERT_EQUAL(int(c), int(back));
+    }
+    Clip x = Clip::Chime;
+    TEST_ASSERT_FALSE(clipFromName("bogus", x));
+    TEST_ASSERT_FALSE(clipFromName("", x));
+    TEST_ASSERT_FALSE(clipFromName(nullptr, x));
+    TEST_ASSERT_NULL(clipName(Clip::None));
+    TEST_ASSERT_NULL(clipFile(Clip::Count));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -195,5 +235,7 @@ int main()
     RUN_TEST(test_text_truncated);
     RUN_TEST(test_table);
     RUN_TEST(test_names);
+    RUN_TEST(test_callout_for);
+    RUN_TEST(test_clip_names);
     return UNITY_END();
 }

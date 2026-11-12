@@ -1,14 +1,14 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.1 → 1.0.2
-Bump rationale: PATCH: factual hardware detail added to Technical Constraints; no rule changed.
-  - T-Watch Ultra screen corners are rounded with a 64 px radius (reported by the user in slice S1). UI layout
-    keeps content inside the visible area (existing Principle VII resolution-independence rule applies).
+Version change: 1.0.2 → 1.0.3
+Bump rationale: PATCH: Technical Constraints storage line aligned with the accepted ADR-009 (assets on the FAT
+  `ffat` partition, not LittleFS) and ADR-013 (assets flashed with `uploadfs`). No principle or rule changed;
+  found by /speckit-analyze for slice S5 (finding C1).
 
 Modified principles: none
 Modified sections:
-  Technical Constraints: Hardware (screen: 410×502 portrait, rounded corners r = 64 px)
+  Technical Constraints: Storage (LittleFS partition → FAT `ffat` partition, ADR-009/ADR-013)
 Added sections: none
 Removed sections: none
 
@@ -18,6 +18,7 @@ Templates reviewed (not modified, per command scope):
   ✅ .specify/templates/tasks-template.md: no conflict
 
 History:
+  1.0.2 (2026-11-11): screen corners rounded r = 64 px (Technical Constraints: Hardware).
   1.0.1 (2026-11-11): screen corrected to 410×502 portrait (LilyGoLib rotation 0); LVGL pin corrected to 9.6.0.
   1.0.0 (2026-11-11): initial ratification (8 principles, Technical Constraints, Workflow & Quality Gates, Governance).
 
@@ -143,8 +144,9 @@ Portability keeps the S3 path open.
   XPowersLib 0.3.x, ESP8266Audio 2.0.0. The concept spec's LVGL 8.3 reference is superseded.
 - **Tasks:** UI + attitude on core 1. Network, radio, audio, microphone and service ticks on
   core 0 (AD-SAS-001 §5.1).
-- **Storage:** Settings in NVS (namespace `aerodeck`, schema-versioned, atomic writes). Assets in a
-  project-owned LittleFS partition. Partition tables MUST NOT reference files inside `.pio/`.
+- **Storage:** Settings in NVS (namespace `aerodeck`, schema-versioned, atomic writes). Assets in the
+  project-owned FAT partition `ffat` (ADR-009), flashed with `uploadfs` (ADR-013). Partition
+  tables MUST NOT reference files inside `.pio/`.
 - **Canonical documents:** `docs/software_requirements_specification.md` (AD-SRS-001, the *what*)
   and `docs/software_architecture_specification.md` (AD-SAS-001, the *how*). Where they conflict,
   this constitution wins, then the SAS for design questions, then the SRS for behaviour questions.
@@ -182,4 +184,4 @@ Portability keeps the S3 path open.
 - **Runtime guidance:** `docs/speckit_slice_prompts.md` provides per-slice prompts. AD-SAS-001
   provides design detail.
 
-**Version**: 1.0.2 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-11
+**Version**: 1.0.3 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-11

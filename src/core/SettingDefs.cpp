@@ -22,6 +22,11 @@ static const SettingDef kDefs[] = {
     // S4 (schema 5)
     {"hapticlvl", SettingType::U8, 1, 0, 2, 0, false, true},   // vibration: 0 off, 1 low, 2 high
     {"quiet", SettingType::Bool, 0, 0, 1, 0, false, true},     // quiet mode (audio + caution/advisory haptics)
+    // S5 (schema 6)
+    {"volume", SettingType::U8, 3, 0, 4, 0, false, true},      // 0 off, 1..4 (default 3: wearer, T016)
+    {"chime", SettingType::Bool, 1, 0, 1, 0, false, true},     // hourly cabin chime
+    {"qhstart", SettingType::U8, 22, 0, 23, 0, false, true},   // quiet hours start (local hour, inclusive)
+    {"qhend", SettingType::U8, 7, 0, 23, 0, false, true},      // quiet hours end (exclusive)
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 

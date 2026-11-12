@@ -33,6 +33,7 @@ the LilyGoLib compatibility patch) is installed or applied automatically by the 
 ```powershell
 pio run -e twatch_ultra                                  # build (first build downloads dependencies)
 pio run -e twatch_ultra -t upload --upload-port COM3     # flash
+pio run -e twatch_ultra -t uploadfs --upload-port COM3   # flash the sound clips (data/ → FAT partition)
 pio device monitor -p COM3 -b 115200                     # serial console
 pio run -e twatchs3                                      # secondary target must also compile
 ```
@@ -43,6 +44,11 @@ pio run -e twatchs3                                      # secondary target must
 > **Windows path length:** some dependencies (RadioLib examples) have very long file paths. Clone into a
 > short directory (e.g. `D:\work\aerodeck`) or enable Windows long-path support, otherwise the first
 > dependency install fails with "No such file or directory".
+
+**Sound clips (S5):** the voice callouts and the chime live in `data/audio/*.wav` and are written to the watch's
+FAT partition with `uploadfs` (ADR-013). This replaces the whole partition (the LilyGoLib factory MP3s are removed).
+Without the clips the watch works silently. To regenerate them (Windows, offline text-to-speech + a synthesized
+chime): `python tools/gen_audio.py`; see `data/audio/README.md`.
 
 ### Host unit tests
 
@@ -75,8 +81,13 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 - **Low battery:** below 15 % (not charging) → **STALL** warning with a stick-shaker vibration every 2 s until
   acknowledged; at 5 % → **PULL UP**. Charging (or recovery past 17 % / 7 %) clears them.
 - **Vibration:** Settings → ALERTS → Vibration (Off / Low / High; warnings always vibrate) and **Quiet mode** (no
-  caution/advisory vibration, no sound from S5). Page changes and controls give a short click. **Test alert** raises
+  caution/advisory vibration, no sound). Page changes and controls give a short click. **Test alert** raises
   a 10 s CAUTION so you can feel it.
+- **Sound (cockpit callouts):** "Stall" / "Pull up" speak with the warning and repeat about every 6 s until you tap
+  the band; a new CAUTION says "Master caution" once; advisories are silent. A soft two-tone **cabin chime** plays at
+  every full hour. Settings → SOUND: **Volume** (Off, 1–4; default 3), **Hourly chime**, **Quiet from / until**
+  (default 22:00–07:00: no chime and no caution callouts; warnings still speak) and **Play sample**. Quiet mode or
+  volume Off silence everything (warnings still vibrate). The speaker amplifier is powered only while a sound plays.
 - **Swipe left/right** to move through the page ring: PFD → WX → Page B → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
@@ -109,6 +120,9 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad wx decode "<METAR>" [show]` · `ad wx clear` · `ad wx age <s>` | Test hooks: decode text (optionally show it on the WX page), clear the cache, pretend the report is N s old |
 | `ad alert` · `ad alert raise <id> [W\|C\|A] ["text"]` · `ad alert clear <id>` · `ad alert ack` | List / raise / clear / acknowledge alerts (ids: `stall`, `pullup`, `test1..3`, …) |
 | `ad haptic <click\|advisory\|caution\|shaker\|stop>` | Play a vibration pattern (current strength / quiet rules) |
+| `ad audio` · `ad audio list` | Audio state (amp, playing, queue, volume, chime, quiet hours) · check every clip file |
+| `ad audio play <clip>` · `ad audio stop` | Play a clip (`master_caution`, `master_warning`, `stall`, `pull_up`, `bingo_fuel`, `minimums`, `traffic`, `chime`) · stop and clear the queue |
+| `ad audio chimecheck <HH:MM:SS>` · `ad audio chimenow` | Test hooks: evaluate the hourly-chime rule for a local time · play the chime through the normal gates |
 | `ad fuel sim <pct\|off> [chg\|nochg]` | Test hook: simulate the battery level (and charging) |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
@@ -120,7 +134,8 @@ Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md)
 [S1 additions](specs/002-pfd-watch-face/contracts/serial_commands.md) ·
 [S2 additions](specs/003-time-sync/contracts/serial_commands.md) ·
 [S3 additions](specs/004-metar-weather/contracts/serial_commands.md) ·
-[S4 additions](specs/005-alert-haptics/contracts/serial_commands.md).
+[S4 additions](specs/005-alert-haptics/contracts/serial_commands.md) ·
+[S5 additions](specs/006-gpws-audio/contracts/serial_commands.md).
 
 ## Project layout
 
@@ -132,7 +147,8 @@ src/services/  settings, power, logging, events, serial console (core 0)
 src/ui/        page manager, theme, overlays (UI task only)
 src/pages/     pages
 test/          Unity tests for src/core/
-tools/         build scripts (LilyGoLib patch, firmware version)
+tools/         build scripts (LilyGoLib patch, firmware version), gen_audio.py (sound clips)
+data/audio/    sound clips flashed with uploadfs (ADR-013)
 partitions/    project-owned partition table
 ```
 

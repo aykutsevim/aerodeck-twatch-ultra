@@ -188,7 +188,7 @@ static void test_validate_station()
 // S4 schema v5: haptic level, quiet mode (additive).
 static void test_schema_v5_haptics()
 {
-    TEST_ASSERT_EQUAL(5, kSchemaVersion);
+    TEST_ASSERT_TRUE(kSchemaVersion >= 5);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(4, 5, true)));
     const SettingDef& h = settingDef(SettingKey::HapticLvl);
     TEST_ASSERT_EQUAL_STRING("hapticlvl", h.key);
@@ -204,6 +204,37 @@ static void test_schema_v5_haptics()
     TEST_ASSERT_TRUE(q.editable);
     TEST_ASSERT_TRUE(validateSetting(SettingKey::HapticLvl, 2));
     TEST_ASSERT_FALSE(validateSetting(SettingKey::HapticLvl, 3));
+}
+
+// S5 schema v6: volume, hourly chime, quiet hours (additive).
+static void test_schema_v6_audio()
+{
+    TEST_ASSERT_EQUAL(6, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(5, 6, true)));
+    struct E { SettingKey k; const char* key; SettingType t; int32_t def, min, max; };
+    const E e[4] = {
+        {SettingKey::Volume, "volume", SettingType::U8, 3, 0, 4},
+        {SettingKey::Chime, "chime", SettingType::Bool, 1, 0, 1},
+        {SettingKey::QhStart, "qhstart", SettingType::U8, 22, 0, 23},
+        {SettingKey::QhEnd, "qhend", SettingType::U8, 7, 0, 23},
+    };
+    for (const E& x : e) {
+        const SettingDef& d = settingDef(x.k);
+        TEST_ASSERT_EQUAL_STRING(x.key, d.key);
+        TEST_ASSERT_EQUAL(int(x.t), int(d.type));
+        TEST_ASSERT_EQUAL(x.def, d.def);
+        TEST_ASSERT_EQUAL(x.min, d.min);
+        TEST_ASSERT_EQUAL(x.max, d.max);
+        TEST_ASSERT_TRUE(d.editable);
+        TEST_ASSERT_FALSE(d.secret);
+        TEST_ASSERT_EQUAL(int(x.k), findSettingKey(x.key));
+        // additive migration: a missing key loads its default
+        TEST_ASSERT_EQUAL(x.def, sanitizeSetting(x.k, 0, false));
+    }
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::Volume, 4));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::Volume, 5));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::QhStart, 24));
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::QhEnd, 0));
 }
 
 static void test_s0_settings_have_no_step()
@@ -237,6 +268,7 @@ int main()
     RUN_TEST(test_schema_v4_wxstn);
     RUN_TEST(test_validate_station);
     RUN_TEST(test_schema_v5_haptics);
+    RUN_TEST(test_schema_v6_audio);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

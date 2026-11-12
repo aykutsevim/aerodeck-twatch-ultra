@@ -14,11 +14,11 @@ constexpr AlertDef kTable[] = {
     {AlertId::SafeMode, AlertLevel::Caution, Pattern::Caution, 0, 0, "SAFE MODE", "safemode"},
     {AlertId::ClockNotSet, AlertLevel::Caution, Pattern::Caution, 0, 0, "CLOCK NOT SET", "clocknotset"},
     {AlertId::TimeUnsync, AlertLevel::Advisory, Pattern::Advisory, 0, 0, "TIME UNSYNC", "timeunsync"},
-    {AlertId::Stall, AlertLevel::Warning, Pattern::StickShaker, 2000, 0, "STALL", "stall"},
-    {AlertId::PullUp, AlertLevel::Warning, Pattern::StickShaker, 2000, 0, "PULL UP", "pullup"},
-    {AlertId::Test1, AlertLevel::Caution, Pattern::Caution, 0, 0, "TEST 1", "test1"},
-    {AlertId::Test2, AlertLevel::Caution, Pattern::Caution, 0, 0, "TEST 2", "test2"},
-    {AlertId::Test3, AlertLevel::Caution, Pattern::Caution, 0, 0, "TEST 3", "test3"},
+    {AlertId::Stall, AlertLevel::Warning, Pattern::StickShaker, 2000, uint8_t(Clip::Stall), "STALL", "stall"},
+    {AlertId::PullUp, AlertLevel::Warning, Pattern::StickShaker, 2000, uint8_t(Clip::PullUp), "PULL UP", "pullup"},
+    {AlertId::Test1, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 1", "test1"},
+    {AlertId::Test2, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 2", "test2"},
+    {AlertId::Test3, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 3", "test3"},
 };
 
 // Shared definition for every peripheral id (text built from the peripheral name).
@@ -130,6 +130,50 @@ Pattern patternForLevel(AlertLevel l)
     case AlertLevel::Advisory: return Pattern::Advisory;
     default: return Pattern::None;
     }
+}
+
+namespace {
+constexpr const char* kClipNames[] = {"master_caution", "master_warning", "stall", "pull_up",
+                                      "bingo_fuel", "minimums", "traffic", "chime"};
+constexpr const char* kClipFiles[] = {"master_caution.wav", "master_warning.wav", "stall.wav", "pull_up.wav",
+                                      "bingo_fuel.wav", "minimums.wav", "traffic.wav", "chime.wav"};
+static_assert(sizeof(kClipNames) / sizeof(kClipNames[0]) == size_t(Clip::Count) - 1, "clip table");
+} // namespace
+
+const char* clipName(Clip c)
+{
+    return (c == Clip::None || uint8_t(c) >= uint8_t(Clip::Count)) ? nullptr : kClipNames[uint8_t(c) - 1];
+}
+
+const char* clipFile(Clip c)
+{
+    return (c == Clip::None || uint8_t(c) >= uint8_t(Clip::Count)) ? nullptr : kClipFiles[uint8_t(c) - 1];
+}
+
+bool clipFromName(const char* name, Clip& out)
+{
+    if (!name || !*name) {
+        return false;
+    }
+    for (uint8_t i = 1; i < uint8_t(Clip::Count); i++) {
+        if (eqNoCase(name, kClipNames[i - 1])) {
+            out = Clip(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+Clip calloutFor(AlertId id, AlertLevel level)
+{
+    if (level != AlertLevel::Caution && level != AlertLevel::Warning) {
+        return Clip::None;   // Advisory (and None) never speak
+    }
+    const AlertDef* d = alertDef(id);
+    if (d && d->voiceClip != 0 && d->voiceClip < uint8_t(Clip::Count)) {
+        return Clip(d->voiceClip);
+    }
+    return level == AlertLevel::Warning ? Clip::MasterWarning : Clip::MasterCaution;
 }
 
 } // namespace core

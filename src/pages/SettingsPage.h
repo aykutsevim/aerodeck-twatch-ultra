@@ -1,4 +1,5 @@
 // Settings page: brightness, overlay, log level, restore defaults, About/Status (FR-008, FR-012, FR-014).
+// S4 ALERTS section; S5 SOUND section (volume, hourly chime, quiet hours, Play sample).
 #pragma once
 #include "ui/Page.h"
 
@@ -19,6 +20,10 @@ private:
     lv_obj_t* wxVal_ = nullptr;      // S3: weather station (button label)
     lv_obj_t* vibDd_ = nullptr;      // S4: vibration off/low/high
     lv_obj_t* quietSw_ = nullptr;    // S4: quiet mode
+    lv_obj_t* volDd_ = nullptr;      // S5: volume Off/1-4
+    lv_obj_t* chimeSw_ = nullptr;    // S5: hourly chime
+    lv_obj_t* qhStartDd_ = nullptr;  // S5: quiet hours start (00:00..23:00)
+    lv_obj_t* qhEndDd_ = nullptr;    // S5: quiet hours end
     lv_obj_t* netVal_ = nullptr;     // S2: network name
     lv_obj_t* netStatus_ = nullptr;  // S2: last result / busy
     lv_obj_t* lastSync_ = nullptr;   // S2: time since last successful sync

@@ -11,6 +11,7 @@
 #include "pages/SettingsPage.h"
 #include "pages/WxPage.h"
 #include "services/AttitudeService.h"
+#include "services/AudioService.h"
 #include "services/BoardCommands.h"
 #include "services/NetService.h"
 #include "services/AlertManager.h"
@@ -191,6 +192,8 @@ void setup()
     AttitudeService::begin();
     PowerService::begin();
     SvcTask::addTick(PowerService::tick);
+    AudioService::begin();               // S5: after PowerService (AudioAmp lease) and TimeService
+    SvcTask::addTick(AudioService::tick);
     SvcTask::addTick(TimeService::tick);
     SvcTask::addTick(AttitudeService::tick);
     WeatherService::begin();             // S3: before NetService (TLS allocator before Wi-Fi is first used)

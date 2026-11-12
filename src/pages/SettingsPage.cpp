@@ -1,11 +1,13 @@
 #include "pages/SettingsPage.h"
 #include "board/IBoard.h"
 #include "core/Zones.h"
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include "services/NetService.h"
 #include "services/SettingsStore.h"
 #include "services/AlertManager.h"
+#include "services/AudioService.h"
 #include "ui/HapticClick.h"
 #include "ui/Theme.h"
 
@@ -260,6 +262,55 @@ void testAlertClicked(lv_event_t*)
     lv_timer_set_repeat_count(t, 1);
 }
 
+// ---- S5: sound ----
+
+void volChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::Volume, int32_t(lv_dropdown_get_selected(lv_event_get_target_obj(e))));
+}
+
+void chimeChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::Chime, lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED) ? 1 : 0);
+}
+
+void qhStartChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::QhStart, int32_t(lv_dropdown_get_selected(lv_event_get_target_obj(e))));
+}
+
+void qhEndChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::QhEnd, int32_t(lv_dropdown_get_selected(lv_event_get_target_obj(e))));
+}
+
+// The chime at the current volume (Sample priority: quiet mode, volume Off and quiet hours apply).
+void sampleClicked(lv_event_t*) { AudioService::play(core::Clip::Chime, core::SoundPrio::Sample); }
+
+const char* hourOptions()
+{
+    static char opts[24 * 6];
+    if (!opts[0]) {
+        char* p = opts;
+        for (int h = 0; h < 24; h++) {
+            p += snprintf(p, size_t(opts + sizeof opts - p), h ? "\n%02d:00" : "%02d:00", h);
+        }
+    }
+    return opts;
+}
+
+lv_obj_t* dropdown(lv_obj_t* parent, const char* opts, int widthPx, lv_event_cb_t cb)
+{
+    lv_obj_t* d = lv_dropdown_create(parent);
+    lv_dropdown_set_options(d, opts);
+    lv_obj_set_width(d, Theme::S(widthPx));
+    lv_obj_set_style_min_height(d, Theme::S(40), 0);
+    lv_obj_add_event_cb(d, cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(d, true);
+    lv_obj_remove_flag(d, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    return d;
+}
+
 lv_obj_t* wideButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb)
 {
     lv_obj_t* b = lv_button_create(parent);
@@ -375,6 +426,26 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_set_flex_flow(tb, LV_FLEX_FLOW_ROW);
     wideButton(tb, "Test alert", testAlertClicked);
 
+    // S5: SOUND (FR-011..FR-013)
+    heading(col, "SOUND");
+    r = row(col, "Volume");
+    volDd_ = dropdown(r, "Off\n1\n2\n3\n4", 90, volChanged);
+    r = row(col, "Hourly chime");
+    chimeSw_ = lv_switch_create(r);
+    lv_obj_set_size(chimeSw_, Theme::S(56), Theme::S(30));
+    lv_obj_add_event_cb(chimeSw_, chimeChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(chimeSw_, true);
+    noSwipe(chimeSw_);
+    r = row(col, "Quiet from");
+    qhStartDd_ = dropdown(r, hourOptions(), 100, qhStartChanged);
+    r = row(col, "Quiet until");
+    qhEndDd_ = dropdown(r, hourOptions(), 100, qhEndChanged);
+    lv_obj_t* sb = lv_obj_create(col);
+    lv_obj_remove_style_all(sb);
+    lv_obj_set_size(sb, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(sb, LV_FLEX_FLOW_ROW);
+    wideButton(sb, "Play sample", sampleClicked);
+
     lv_obj_t* rb = lv_button_create(col);
     lv_obj_add_style(rb, Theme::button(), 0);
     lv_obj_set_width(rb, lv_pct(100));
@@ -428,6 +499,14 @@ void SettingsPage::refresh()
     } else {
         lv_obj_remove_state(quietSw_, LV_STATE_CHECKED);
     }
+    lv_dropdown_set_selected(volDd_, uint32_t(SettingsStore::get(SettingKey::Volume)));
+    if (SettingsStore::getBool(SettingKey::Chime)) {
+        lv_obj_add_state(chimeSw_, LV_STATE_CHECKED);
+    } else {
+        lv_obj_remove_state(chimeSw_, LV_STATE_CHECKED);
+    }
+    lv_dropdown_set_selected(qhStartDd_, uint32_t(SettingsStore::get(SettingKey::QhStart)));
+    lv_dropdown_set_selected(qhEndDd_, uint32_t(SettingsStore::get(SettingKey::QhEnd)));
 
     // S2: network & sync status (FR-017)
     char ssid[33];
