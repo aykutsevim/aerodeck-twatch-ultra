@@ -7,7 +7,7 @@
 #include "board/IBoard.h"
 #include "core/BootGuard.h"
 #include "pages/PfdPage.h"
-#include "pages/PlaceholderPage.h"
+#include "pages/RecorderPage.h"
 #include "pages/SettingsPage.h"
 #include "pages/WxPage.h"
 #include "services/AttitudeService.h"
@@ -19,6 +19,7 @@
 #include "services/EventBus.h"
 #include "services/Log.h"
 #include "services/PowerService.h"
+#include "services/RecorderService.h"
 #include "services/SerialConsole.h"
 #include "services/SettingsStore.h"
 #include "services/SvcTask.h"
@@ -42,7 +43,7 @@ static QueueHandle_t g_uiQueue;
 
 static PfdPage g_home;
 static WxPage g_wx;   // S3: replaces the "PAGE A" placeholder
-static PlaceholderPage g_pageB(PageId::PlaceholderB, "PAGE B");
+static RecorderPage g_recorder;   // S6: replaces the "PAGE B" placeholder
 static SettingsPage g_settings;
 
 static bool abnormalReset()
@@ -115,6 +116,7 @@ static void deferredProbeTask(void*)
     uint32_t t0 = millis();
     board().probeDeferred();
     AttitudeService::onImuReady(board().periph(Periph::Imu) == PeriphState::Ok);
+    RecorderService::onImuReady(board().periph(Periph::Imu) == PeriphState::Ok);   // S6: hub is up now
     PowerService::enforceIdleRails();
     raisePeriphCautions();
     EventBus::publish(EventType::PeriphStatusChanged);
@@ -195,6 +197,8 @@ void setup()
     AudioService::begin();               // S5: after PowerService (AudioAmp lease) and TimeService
     SvcTask::addTick(AudioService::tick);
     SvcTask::addTick(TimeService::tick);
+    RecorderService::begin();            // S6: loads the saved days; motion starts in onImuReady
+    SvcTask::addTick(RecorderService::tick);
     SvcTask::addTick(AttitudeService::tick);
     WeatherService::begin();             // S3: before NetService (TLS allocator before Wi-Fi is first used)
     SvcTask::addTick(WeatherService::tick);
@@ -205,7 +209,7 @@ void setup()
     g_uiQueue = EventBus::subscribe(16);
     PageManager::registerPage(&g_home);
     PageManager::registerPage(&g_wx);
-    PageManager::registerPage(&g_pageB);
+    PageManager::registerPage(&g_recorder);
     PageManager::registerPage(&g_settings);
     PageManager::onFirstHome(onFirstHome);
 

@@ -10,6 +10,14 @@ struct GravitySample {
     uint32_t ms;     // millis() when the sample was received
 };
 
+// S6: what configureMotion() could enable (the service logs it).
+struct MotionInfo {
+    bool steps;          // hub step counter running
+    bool accel;          // accelerometer (incl. gravity) running
+    float accelScale;    // LSB → g as applied
+    float rangeG;        // measuring range in g (0 = unknown)
+};
+
 class IBoard {
 public:
     using GravityCb = void (*)(const GravitySample& s, void* ctx);
@@ -49,6 +57,13 @@ public:
     virtual bool audioBegin(uint32_t rateHz) = 0;
     virtual size_t audioWrite(const int16_t* s, size_t n) = 0;
     virtual void audioEnd() = 0;
+    // S6: flight recorder. configureMotion after the IMU is up (deferred probe): step counter 1 Hz + accelerometer
+    // at accelHz. Callbacks run on the UI task (inside loop()) and only store values. stepCount: the hub's count
+    // since it started. takePeakG: the peak |a| in g since the previous call (then reset), the latest |a| and the
+    // range. Both return false when the source is unavailable.
+    virtual bool configureMotion(float accelHz, MotionInfo& info) = 0;
+    virtual bool stepCount(uint32_t& out) = 0;
+    virtual bool takePeakG(float& peak, float& last, float& rangeG) = 0;
     virtual ~IBoard() = default;
 };
 

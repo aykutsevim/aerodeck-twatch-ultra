@@ -209,7 +209,7 @@ static void test_schema_v5_haptics()
 // S5 schema v6: volume, hourly chime, quiet hours (additive).
 static void test_schema_v6_audio()
 {
-    TEST_ASSERT_EQUAL(6, kSchemaVersion);
+    TEST_ASSERT_TRUE(kSchemaVersion >= 6);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(5, 6, true)));
     struct E { SettingKey k; const char* key; SettingType t; int32_t def, min, max; };
     const E e[4] = {
@@ -235,6 +235,27 @@ static void test_schema_v6_audio()
     TEST_ASSERT_FALSE(validateSetting(SettingKey::Volume, 5));
     TEST_ASSERT_FALSE(validateSetting(SettingKey::QhStart, 24));
     TEST_ASSERT_TRUE(validateSetting(SettingKey::QhEnd, 0));
+}
+
+// S6 schema v7: stride (additive).
+static void test_schema_v7_stride()
+{
+    TEST_ASSERT_EQUAL(7, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(6, 7, true)));
+    const SettingDef& d = settingDef(SettingKey::Stride);
+    TEST_ASSERT_EQUAL_STRING("stride", d.key);
+    TEST_ASSERT_EQUAL(int(SettingType::U8), int(d.type));
+    TEST_ASSERT_EQUAL(75, d.def);
+    TEST_ASSERT_EQUAL(30, d.min);
+    TEST_ASSERT_EQUAL(150, d.max);
+    TEST_ASSERT_TRUE(d.editable);
+    TEST_ASSERT_FALSE(d.secret);
+    TEST_ASSERT_EQUAL(int(SettingKey::Stride), findSettingKey("stride"));
+    TEST_ASSERT_EQUAL(75, sanitizeSetting(SettingKey::Stride, 0, false));   // missing key → default
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::Stride, 30));
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::Stride, 150));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::Stride, 29));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::Stride, 151));
 }
 
 static void test_s0_settings_have_no_step()
@@ -269,6 +290,7 @@ int main()
     RUN_TEST(test_validate_station);
     RUN_TEST(test_schema_v5_haptics);
     RUN_TEST(test_schema_v6_audio);
+    RUN_TEST(test_schema_v7_stride);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

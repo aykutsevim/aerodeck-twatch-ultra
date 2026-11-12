@@ -27,6 +27,8 @@ static const SettingDef kDefs[] = {
     {"chime", SettingType::Bool, 1, 0, 1, 0, false, true},     // hourly cabin chime
     {"qhstart", SettingType::U8, 22, 0, 23, 0, false, true},   // quiet hours start (local hour, inclusive)
     {"qhend", SettingType::U8, 7, 0, 23, 0, false, true},      // quiet hours end (exclusive)
+    // S6 (schema 7)
+    {"stride", SettingType::U8, 75, 30, 150, 0, false, true},  // stride length in cm (Flight Miles)
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 
