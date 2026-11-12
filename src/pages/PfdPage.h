@@ -31,4 +31,11 @@ private:
     uint32_t lastNotifiedSampleMs_ = 0;
     int lastMinuteKey_ = -1;     // utc minute + validity + tz, to detect corner/tape changes
     uint32_t lastPowerSeq_ = 0;
+    // S6: flight recorder slots
+    void updateRecorder(bool force);
+    lv_obj_t* maxg_ = nullptr;
+    lv_obj_t* nm_ = nullptr;
+    uint32_t lastRecSeq_ = 0;
+    char maxgText_[24] = "";
+    char nmText_[24] = "";
 };

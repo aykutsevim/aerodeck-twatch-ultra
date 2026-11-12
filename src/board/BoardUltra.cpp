@@ -148,6 +148,61 @@ public:
         return true;
     }
 
+    // S6: flight recorder sources on the BHI260AP (research R1/R2).
+    bool configureMotion(float accelHz, MotionInfo& info) override
+    {
+        info = MotionInfo{false, false, 0.0f, 0.0f};
+        if (periph(Periph::Imu) != PeriphState::Ok) {
+            return false;
+        }
+        I2cLock lock;
+        info.steps = instance.sensor.onResultEvent(SensorBHI260AP::STEP_COUNTER, &BoardUltra::onStep, this) &&
+                     instance.sensor.configure(BHY2_SENSOR_ID_STC, 1.0f, 0);
+        instance.sensor.configureRange(BHY2_SENSOR_ID_ACC, 16);   // ±16 g if the firmware accepts it
+        float scale = instance.sensor.getScaling(BHY2_SENSOR_ID_ACC);
+        if (!(scale > 0.0f)) {
+            scale = 1.0f / 4096.0f;
+        }
+        info.accel = instance.sensor.onResultEvent(SensorBHI260AP::ACCEL_CORRECTED, &BoardUltra::onAccel, this) &&
+                     instance.sensor.configure(BHY2_SENSOR_ID_ACC, accelHz, 0);
+        const SensorConfig cfg = instance.sensor.getConfigure(BHY2_SENSOR_ID_ACC);
+        if (cfg.range > 0) {
+            // getScaling() keeps reporting the default ±8 g step (1/4096 g) after configureRange: measured at rest
+            // |a| = 0.50 with ±16 g (S6 T012). Full scale = range over the int16 span.
+            scale = float(cfg.range) / 32768.0f;
+        }
+        accelScale_ = scale;
+        info.accelScale = scale;
+        info.rangeG = float(cfg.range);
+        rangeG_ = info.rangeG;
+        stepsOk_ = info.steps;
+        accelOk_ = info.accel;
+        return info.steps || info.accel;
+    }
+
+    bool stepCount(uint32_t& out) override
+    {
+        if (!stepsOk_) {
+            return false;
+        }
+        out = stepSeen_ ? steps_ : 0;   // no event yet: the hub has counted nothing since it started
+        return true;
+    }
+
+    bool takePeakG(float& peak, float& last, float& rangeG) override
+    {
+        if (!accelOk_) {
+            return false;
+        }
+        portENTER_CRITICAL(&motionLock_);
+        peak = peakG_;
+        last = lastG_;
+        peakG_ = 0.0f;
+        portEXIT_CRITICAL(&motionLock_);
+        rangeG = rangeG_;
+        return true;
+    }
+
     // S5: speaker via LilyGoLib's Player (I2S port PLAYER_IS2_PORT, installed by initAmplifier() at boot).
     bool audioBegin(uint32_t rateHz) override
     {
@@ -377,6 +432,34 @@ private:
         self->gravityCb_(s, self->gravityCtx_);
     }
 
+    static void onStep(uint8_t, uint8_t* data, uint32_t size, uint64_t*, void* user)
+    {
+        auto* self = static_cast<BoardUltra*>(user);
+        if (size < 4) {
+            return;
+        }
+        self->steps_ = bhy2_parse_step_counter(data);
+        self->stepSeen_ = true;
+    }
+
+    static void onAccel(uint8_t, uint8_t* data, uint32_t size, uint64_t*, void* user)
+    {
+        auto* self = static_cast<BoardUltra*>(user);
+        if (size < 6) {
+            return;
+        }
+        bhy2_data_xyz v;
+        bhy2_parse_xyz(data, &v);
+        const float x = v.x * self->accelScale_, y = v.y * self->accelScale_, z = v.z * self->accelScale_;
+        const float g = sqrtf(x * x + y * y + z * z);
+        portENTER_CRITICAL(&self->motionLock_);
+        self->lastG_ = g;
+        if (g > self->peakG_) {
+            self->peakG_ = g;
+        }
+        portEXIT_CRITICAL(&self->motionLock_);
+    }
+
     static void onDeviceEvent(DeviceEvent_t event, void* params, void* user)
     {
         auto* self = static_cast<BoardUltra*>(user);
@@ -415,6 +498,16 @@ private:
     bool displayOk_ = false;
     bool lvgl_ = false;
     bool audioReady_ = false;   // S5: Player I2S driver installed
+    // S6 motion (written on the UI task by the hub callbacks, read by the recorder on the svc task)
+    portMUX_TYPE motionLock_ = portMUX_INITIALIZER_UNLOCKED;
+    volatile uint32_t steps_ = 0;
+    volatile bool stepSeen_ = false;
+    volatile bool stepsOk_ = false;
+    volatile bool accelOk_ = false;
+    float peakG_ = 0.0f;
+    float lastG_ = 0.0f;
+    float accelScale_ = 1.0f / 4096.0f;
+    float rangeG_ = 0.0f;
     StageCb stageCb_ = nullptr;
     GravityCb gravityCb_ = nullptr;
     void* gravityCtx_ = nullptr;

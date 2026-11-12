@@ -12,6 +12,7 @@ enum class SettingKey : uint8_t {
     WxStation,                                  // S3
     HapticLvl, Quiet,                           // S4
     Volume, Chime, QhStart, QhEnd,              // S5
+    Stride,                                     // S6
     Count
 };
 
@@ -27,7 +28,7 @@ struct SettingDef {
     const char* sdef = nullptr;   // string default (Str type); nullptr = empty
 };
 
-constexpr uint16_t kSchemaVersion = 6;   // v3 (S2): wifi*, tzid, syncmin, lastsync; tzoff removed. v4 (S3): wxstn. v5 (S4): hapticlvl, quiet. v6 (S5): volume, chime, qhstart, qhend
+constexpr uint16_t kSchemaVersion = 7;   // v3 (S2): wifi*, tzid, syncmin, lastsync; tzoff removed. v4 (S3): wxstn. v5 (S4): hapticlvl, quiet. v6 (S5): volume, chime, qhstart, qhend. v7 (S6): stride
 constexpr const char* kLegacyTzoffKey = "tzoff";   // S1 key, migrated to tzid
 constexpr const char* kSchemaKey = "schema";
 constexpr const char* kNamespace = "aerodeck";

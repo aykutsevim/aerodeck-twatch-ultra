@@ -3,6 +3,10 @@
 #include "core/ClockMath.h"
 #include "services/AttitudeService.h"
 #include "services/PowerService.h"
+#include "services/RecorderService.h"
+#include <cstdio>
+#include <cstring>
+#include "core/FlightMath.h"
 #include "services/TimeService.h"
 #include "ui/Theme.h"
 #include "ui/fonts/fonts.h"
@@ -52,9 +56,9 @@ void PfdPage::onCreate(lv_obj_t* scr)
     eicas_.create(scr, L.eicas.x, L.eicas.y, L.eicas.w, L.eicas.h);
     corner(scr, L.zulu, "ZULU", &zulu_);
     corner(scr, L.local, "LOCAL", &local_);
-    // Placeholders filled by the flight recorder (slice S6, FR-017).
-    smallLabel(scr, L.maxg, "MAX G\n--", LV_ALIGN_TOP_LEFT);
-    smallLabel(scr, L.nm, "FLT NM\n--", LV_ALIGN_TOP_RIGHT);   // "FLIGHT NM" did not fit the box
+    // Flight recorder slots (S6, FR-PFD-008): filled from RecorderSnapshot in frame().
+    maxg_ = smallLabel(scr, L.maxg, "MAX G\n--", LV_ALIGN_TOP_LEFT);
+    nm_ = smallLabel(scr, L.nm, "FLT NM\n--", LV_ALIGN_TOP_RIGHT);   // "FLIGHT NM" did not fit the box
     lv_display_add_event_cb(lv_display_get_default(), renderReadyCb, LV_EVENT_RENDER_READY, this);
 }
 
@@ -112,6 +116,31 @@ void PfdPage::frame(bool force)
     if (force || ps.seq() != lastPowerSeq_) {
         lastPowerSeq_ = ps.seq();
         eicas_.set(ps.read());
+    }
+    updateRecorder(force);
+}
+
+// S6: MAX G / FLT NM (FR-003, FR-005). The snapshot changes every second; the labels only when their text does.
+void PfdPage::updateRecorder(bool force)
+{
+    const Snapshot<RecorderSnapshot>& rs = RecorderService::status();
+    if (!force && rs.seq() == lastRecSeq_) {
+        return;
+    }
+    lastRecSeq_ = rs.seq();
+    const RecorderSnapshot r = rs.read();
+    char v[12], t[24];
+    core::FlightMath::formatG(r.maxGc, r.accelOk, r.maxGSat, v, sizeof v);
+    snprintf(t, sizeof t, "MAX G\n%s", v);
+    if (force || strcmp(t, maxgText_) != 0) {
+        strcpy(maxgText_, t);
+        lv_label_set_text(maxg_, t);
+    }
+    core::FlightMath::formatNm(core::FlightMath::nm(r.steps, r.strideCm), r.stepsOk, v, sizeof v);
+    snprintf(t, sizeof t, "FLT NM\n%s", v);
+    if (force || strcmp(t, nmText_) != 0) {
+        strcpy(nmText_, t);
+        lv_label_set_text(nm_, t);
     }
 }
 

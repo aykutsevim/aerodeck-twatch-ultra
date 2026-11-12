@@ -284,6 +284,15 @@ void qhEndChanged(lv_event_t* e)
     SettingsStore::set(SettingKey::QhEnd, int32_t(lv_dropdown_get_selected(lv_event_get_target_obj(e))));
 }
 
+// S6: stride ±5 cm, clamped to the setting's range (the console accepts any cm value).
+void strideStep(lv_event_t* e)
+{
+    int32_t v = SettingsStore::get(SettingKey::Stride) + int32_t(intptr_t(lv_event_get_user_data(e)));
+    const core::SettingDef& d = core::settingDef(SettingKey::Stride);
+    v = v < d.min ? d.min : (v > d.max ? d.max : v);
+    SettingsStore::set(SettingKey::Stride, v);
+}
+
 // The chime at the current volume (Sample priority: quiet mode, volume Off and quiet hours apply).
 void sampleClicked(lv_event_t*) { AudioService::play(core::Clip::Chime, core::SoundPrio::Sample); }
 
@@ -446,6 +455,20 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     lv_obj_set_flex_flow(sb, LV_FLEX_FLOW_ROW);
     wideButton(sb, "Play sample", sampleClicked);
 
+    // S6: RECORDER (FR-002)
+    heading(col, "RECORDER");
+    r = row(col, "Stride");
+    lv_obj_t* sc = lv_obj_create(r);
+    lv_obj_remove_style_all(sc);
+    lv_obj_set_size(sc, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(sc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sc, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(sc, Theme::S(8), 0);
+    smallButton(sc, LV_SYMBOL_MINUS, strideStep, reinterpret_cast<void*>(intptr_t(-5)));
+    strideVal_ = lv_label_create(sc);
+    lv_obj_add_style(strideVal_, Theme::body(), 0);
+    smallButton(sc, LV_SYMBOL_PLUS, strideStep, reinterpret_cast<void*>(intptr_t(5)));
+
     lv_obj_t* rb = lv_button_create(col);
     lv_obj_add_style(rb, Theme::button(), 0);
     lv_obj_set_width(rb, lv_pct(100));
@@ -507,6 +530,8 @@ void SettingsPage::refresh()
     }
     lv_dropdown_set_selected(qhStartDd_, uint32_t(SettingsStore::get(SettingKey::QhStart)));
     lv_dropdown_set_selected(qhEndDd_, uint32_t(SettingsStore::get(SettingKey::QhEnd)));
+    const int32_t cm = SettingsStore::get(SettingKey::Stride);
+    lv_label_set_text_fmt(strideVal_, "%ld.%02ld m", (long)(cm / 100), (long)(cm % 100));
 
     // S2: network & sync status (FR-017)
     char ssid[33];

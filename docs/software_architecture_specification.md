@@ -70,7 +70,9 @@ struct IBoard {
   virtual PmuReading readPmu() = 0;         // batt %, mA (signed), die °C, charging
   virtual bool readRtc(tm&) = 0;  virtual bool writeRtc(const tm&) = 0;
   virtual ImuSample readImu() = 0;          // accel (g), gyro (dps) if available
-  virtual uint32_t stepCount() = 0;
+  virtual bool configureMotion(float accelHz, MotionInfo&) = 0;   // S6: hub step counter 1 Hz + accel (after the deferred probe)
+  virtual bool stepCount(uint32_t& out) = 0;                       // S6: hub count since it started; false = unavailable
+  virtual bool takePeakG(float& peak, float& last, float& rangeG) = 0;   // S6: peak |a| in g since the last call
   virtual bool haptic(const uint8_t* seq, uint8_t n) = 0;   // S4: DRV2605 sequence (effect ids, 0x80|n = wait)
   virtual void hapticStop() = 0;
   virtual bool audioBegin(uint32_t rateHz) = 0;                     // S5: 16-bit mono I2S via LilyGoLib Player
@@ -128,7 +130,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `AlertManager` | S4 | Single alert path (replaces the S0 `Cautions` list): raise/clear/ack from any task, `core::AlertSet` (order: level, then raise sequence; higher level re-arms) and the `core::Alerts` table (id → level, pattern, repeat, voice clip for S5); WARNING stick shaker repeated every 2 s until acknowledged; `AnnunciatorBar` band on the top layer (flash until ack, cycle when acked, tap = ack all) | `AlertSnapshot`, `AlertRaised/Cleared/Acked` |
 | `HapticService` | S4 | `core::HapticPolicy` (effect sequence per pattern × intensity × quiet; WARNING always full strength) + priority (a click never cuts a warning; never queued); plays via `IBoard::haptic(seq)`; `click()` safe from the UI task (~0.5 ms) | — |
 | `AudioService` | S5 | `audio` task (core 0, prio 5): `core::SoundQueue` (cap 6; Warning > Caution > Chime > Sample; dedupe; preempt; stale drop 5 s / chime 2 s), WAV from the FAT partition via `FFat` (platform service, ADR-013) parsed by `core::Wav`, q15 volume (`core::AudioMath`, Off + 4 steps), `RailLease(AudioAmp)` only while playing (30 ms settle, 20 ms zero guards, DMA flush + 150 ms tail → amp off ≈0.4 s after the last clip), output via `IBoard::audio*`; gates and hourly chime from `core::AudioPolicy` (quiet mode, volume Off, quiet hours; one chime per local hour); AlertManager queues callouts on raise/re-arm, every 3rd shaker cycle (~6 s) for an unacked WARNING, and stops them on acknowledge | — |
-| `RecorderService` | S6 | Steps→NM, Max G, daily rollover, 7-day ring | `RecorderSnapshot` |
+| `RecorderService` | S6 | svc tick at 1 Hz: polls `IBoard::stepCount` (BHI260AP step counter) through `core::StepAccumulator` (hub restarts, implausible jumps) and `takePeakG` (corrected accelerometer, 50 Hz, ±16 g; peaks in the first 2 s after start-up discarded) into `core::DayLog` (today + 7 days, local-midnight rollover; no rollover while the clock is unset or when the date moves back; skipped days empty); motion configured in `onImuReady()` from the deferred probe; NM = steps × stride / 1852 (`core::FlightMath`); persisted in NVS `rec` (`core::RecBlob`, 100 B, CRC) every 10 min when changed, at rollover and on `esp_restart` (shutdown handler); `saveNow()` for S7; `ad rec …` | `RecorderSnapshot` |
 | `ChronoService` | S8 | Countdown model (`drop_tank_model`), Pomodoro, survives sleep via RTC RAM + wake timer | `ChronoSnapshot`, `ChronoExpired` |
 | `RadioService` | S9 | SX1262 config per region, RX IRQ, TX queue, duty-cycle budget (`duty_cycle`) | — |
 | `TcasService` | S9 | Beacon schedule, target table, ageing, RSSI→range | `TcasSnapshot`, `TargetNew` |
@@ -142,8 +144,8 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 ### 7.1 Persistent storage
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
-| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v6 in S5: `volume` 0..4 default 3, `chime` default 1, `qhstart` 0..23 default 22, `qhend` 0..23 default 7; v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
-| Recorder | NVS `rec` (hourly) + `RTC_DATA_ATTR` (on sleep) | Today's steps/maxG/time + 7-day ring |
+| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v7 in S6: `stride` 30..150 cm default 75; v6 in S5: `volume` 0..4 default 3, `chime` default 1, `qhstart` 0..23 default 22, `qhend` 0..23 default 7; v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| Recorder | Own NVS namespace `rec` (so Restore defaults keeps it), blob `day` (100 B, versioned + CRC): every 10 min when changed (stricter than the planned hourly), at each rollover and on `esp_restart`; `RTC_DATA_ATTR` before deep sleep follows in S7 | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
 | Assets | FAT partition `ffat` (mounted by LilyGoLib, ADR-009), flashed from `data/` with `pio run -t uploadfs` (ADR-013) `/audio/*.wav` (16-bit PCM, mono, 16 kHz; generated by `tools/gen_audio.py`) | master_caution, master_warning, stall, pull_up, bingo_fuel, minimums, traffic, chime |
 

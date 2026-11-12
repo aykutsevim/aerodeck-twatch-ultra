@@ -24,6 +24,7 @@ private:
     lv_obj_t* chimeSw_ = nullptr;    // S5: hourly chime
     lv_obj_t* qhStartDd_ = nullptr;  // S5: quiet hours start (00:00..23:00)
     lv_obj_t* qhEndDd_ = nullptr;    // S5: quiet hours end
+    lv_obj_t* strideVal_ = nullptr;  // S6: stride label (-/+ buttons)
     lv_obj_t* netVal_ = nullptr;     // S2: network name
     lv_obj_t* netStatus_ = nullptr;  // S2: last result / busy
     lv_obj_t* lastSync_ = nullptr;   // S2: time since last successful sync

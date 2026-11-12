@@ -154,11 +154,11 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 3.6 G-Force & flight recorder (REC)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| FR-REC-001 | M | The system shall count daily steps and convert them to **Flight Miles (NM)** using a user-set stride length (default 0.75 m; 1 NM = 1852 m). |
+| FR-REC-001 | M | The system shall count daily steps and convert them to **Flight Miles (NM)** using a user-set stride length (default 0.75 m; 1 NM = 1852 m). *(S6: stride 0.30–1.50 m, setting `stride` in cm; NM is always recomputed from the stored steps, so a stride change also rescales the history.)* |
 | FR-REC-002 | M | The system shall track the peak acceleration magnitude in **g** (gravity-included magnitude, sampled at ≥50 Hz), and keep the daily **Max G** and the time it occurred. |
 | FR-REC-003 | M | Daily counters shall reset at local midnight. The previous 7 days shall be kept. |
 | FR-REC-004 | M | A recorder page shall show today's NM, steps, Max G, and a 7-day bar chart. |
-| FR-REC-005 | M | Recorder data shall survive deep sleep and reboot (written to RTC memory before sleep and to flash at least hourly). |
+| FR-REC-005 | M | Recorder data shall survive deep sleep and reboot (written to RTC memory before sleep and to flash at least hourly). *(S6: saved every 10 min when changed, at each rollover and on every planned restart; **Restore defaults keeps the recorder data** (own NVS namespace); deep sleep is handled in S7.)* |
 
 ### 3.7 Chronograph — "Drop Tank" timer (CHR)
 | ID | Pri | Requirement |

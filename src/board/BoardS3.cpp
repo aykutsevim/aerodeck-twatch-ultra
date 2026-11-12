@@ -60,6 +60,15 @@ public:
         return true;
     }
 
+    // S6: the S3's BMA423 step counter is not wired in this compile-only target (research R10).
+    bool configureMotion(float, MotionInfo& info) override
+    {
+        info = MotionInfo{false, false, 0.0f, 0.0f};
+        return false;
+    }
+    bool stepCount(uint32_t&) override { return false; }
+    bool takePeakG(float&, float&, float&) override { return false; }
+
     // S5: speaker via LilyGoLib's Player (I2S port PLAYER_IS2_PORT, installed by initAmplifier() at boot).
     bool audioBegin(uint32_t rateHz) override
     {

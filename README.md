@@ -88,7 +88,12 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
   every full hour. Settings → SOUND: **Volume** (Off, 1–4; default 3), **Hourly chime**, **Quiet from / until**
   (default 22:00–07:00: no chime and no caution callouts; warnings still speak) and **Play sample**. Quiet mode or
   volume Off silence everything (warnings still vibrate). The speaker amplifier is powered only while a sound plays.
-- **Swipe left/right** to move through the page ring: PFD → WX → Page B → Settings → PFD.
+- **Flight recorder:** the PFD's top corners show today's **MAX G** (highest g-force from wrist movements) and
+  **FLT NM** (steps × your stride, in nautical miles). The **RECORDER** page shows today's NM, steps, Max G with its
+  time, and a 7-day bar chart (today green; tap a bar for that day). Days start at local midnight; the last 7 days
+  are kept and survive restarts (saved every 10 min; Restore defaults keeps them). Set your stride in Settings →
+  RECORDER → Stride (0.30–1.50 m, default 0.75 m).
+- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
   restore defaults, and firmware/peripheral status.
@@ -123,6 +128,8 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad audio` · `ad audio list` | Audio state (amp, playing, queue, volume, chime, quiet hours) · check every clip file |
 | `ad audio play <clip>` · `ad audio stop` | Play a clip (`master_caution`, `master_warning`, `stall`, `pull_up`, `bingo_fuel`, `minimums`, `traffic`, `chime`) · stop and clear the queue |
 | `ad audio chimecheck <HH:MM:SS>` · `ad audio chimenow` | Test hooks: evaluate the hourly-chime rule for a local time · play the chime through the normal gates |
+| `ad rec` · `ad rec save` | Flight recorder: today, the last 7 days, sensor state, live g · save now |
+| `ad rec sim steps <n>` · `ad rec sim g <x.x>` · `ad rec rollover` · `ad rec clear` | Test hooks: add steps, inject a peak, act as if midnight passed, erase the recorder |
 | `ad fuel sim <pct\|off> [chg\|nochg]` | Test hook: simulate the battery level (and charging) |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
@@ -135,7 +142,8 @@ Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md)
 [S2 additions](specs/003-time-sync/contracts/serial_commands.md) ·
 [S3 additions](specs/004-metar-weather/contracts/serial_commands.md) ·
 [S4 additions](specs/005-alert-haptics/contracts/serial_commands.md) ·
-[S5 additions](specs/006-gpws-audio/contracts/serial_commands.md).
+[S5 additions](specs/006-gpws-audio/contracts/serial_commands.md) ·
+[S6 additions](specs/007-flight-recorder/contracts/serial_commands.md).
 
 ## Project layout
 
