@@ -78,7 +78,12 @@ struct IBoard {
   virtual bool audioBegin(uint32_t rateHz) = 0;                     // S5: 16-bit mono I2S via LilyGoLib Player
   virtual size_t audioWrite(const int16_t* s, size_t n) = 0;        //     blocks until DMA accepted (audio task)
   virtual void audioEnd() = 0;                                      //     zero the DMA ring
-  virtual void configureWake(WakeSources) = 0;
+  // S7 (specs/008-nvg-eject-power/contracts/board_interface.md):
+  virtual void setDisplayOn(bool on) = 0;                         // UI task: AMOLED sleep-in/out, rail kept on
+  virtual void setNvgFilter(bool on) = 0;                         // flush recolours every pixel (core::NvgColor)
+  virtual bool deepSleep(uint8_t wakeMask, uint32_t timerSec) = 0;   // own sequence (ADR-014); false = unsupported
+  virtual WakeCause wakeCause() const = 0;                        // PowerOn / Button / Imu / Timer / Other
+  // (the planned configureWake() is folded into deepSleep's wake mask)
   // accessors for Radio/Audio/Mic/Nfc/Ir/Gnss handles, each nullable
 };
 IBoard& board();   // selected at compile time by ARDUINO_T_WATCH_S3_ULTRA / ARDUINO_T_WATCH_S3
@@ -113,15 +118,28 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 
 **Low battery (S4):** `PowerService` sees batt <15 % and not charging → `AlertManager::raise(STALL, WARNING)` → arbiter picks the highest alert → event to UI (annunciator) → `HapticService` plays the stick shaker pattern → `AudioService` plays *Master Caution* (unless quiet) → user tap → `ack`.
 
-**Eject (S7):** UI `EjectRequested` → `PowerService::eject()`: Recorder and Chrono flush to RTC RAM + NVS → stop radio/audio/mic/gnss tasks → rails off → `board().configureWake(Button | ImuTilt | ChronoTimer)` → `esp_deep_sleep_start()`.
+**Eject (S7, ADR-014):**
+1. The UI `EjectHandle` (double tap + pull, `core::EjectGesture`) or `ad eject` posts `EjectRequested`.
+2. `PowerService::eject()` runs on the svc task:
+   1. `RecorderService::saveNow("eject")` to NVS (no `RTC_DATA_ATTR` mirror);
+   2. stop audio, haptics and the setup portal;
+   3. **pre-sleep hooks** (S8's chrono returns its wake time);
+   4. the UI **quiesce** handshake (flag + semaphore: the UI stops LVGL, waits for the last flush, turns the panel
+      off);
+   5. `board().deepSleep(Button [| Timer], s)`.
+3. The board's own sequence powers off the optional rails, keeps the display rail, the idle sensor hub and the RTC
+   backup charge, then arms ext1 on `PMU_INT` (+ the timer).
+4. Wrist-motion wake is not used (OI-1 closed, spike behind `AERODECK_IMU_WAKE`).
+5. Measured: 103 ms from the end of the gesture to sleep; 3.4 s from wake to the watch face.
 
 ## 6. Module catalogue
 | Module | Slice | Responsibilities | Publishes / API |
 | :--- | :---: | :--- | :--- |
 | `PageManager` | S0 | Page ring, swipe/button nav, lifecycle (`onCreate/onEnter/onExit/onTick`), page indicator, click haptic hook | `PageChanged` |
-| `Theme` | S0/S7 | Palette tokens (sky, ground, hud-green, warning, caution, advisory, bg), fonts, scale factor from `DisplayInfo`, NVG variant | `NvgChanged` |
+| `Theme` | S0 | Palette tokens (sky, ground, hud-green, warning, caution, advisory, bg), fonts, scale factor from `DisplayInfo`. NVG is done by the board flush filter (S7, §8) | — |
+| `ScreenService` | S7 | UI task: screen timeout (`core::ScreenPolicy`), raise-to-wake (`core::RaiseDetector` on the gravity tap), button/alert wake, touch suppression after a wake, `ad screen`/`ad nvg` | `ScreenSnapshot`, `ScreenChanged` |
 | `SettingsStore` | S0 | Typed NVS key/value with defaults, schema version, change events | `SettingsChanged` |
-| `PowerService` | S0/S7 | Rail leases (`RailLease` RAII, refcount), PMU polling 1 Hz, screen timeout, eject | `PowerSnapshot` |
+| `PowerService` | S0/S7 | Rail leases (`RailLease` RAII, refcount), PMU polling 1 Hz; S7: eject sequence, pre-sleep hooks, UI quiesce, `ad eject`/`ad wake`, profiling `ad pwr log` | `PowerSnapshot` |
 | `Log` | S0 | Levelled serial logging, no secrets | — |
 | `AttitudeService` | S1 | IMU sampling, complementary filter, level lock detection, peak-g | `AttitudeSnapshot` |
 | `TimeService` | S2 | RTC↔system clock, TZ, sync scheduling, last-sync age | `TimeSnapshot` |
@@ -144,8 +162,8 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 ### 7.1 Persistent storage
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
-| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v7 in S6: `stride` 30..150 cm default 75; v6 in S5: `volume` 0..4 default 3, `chime` default 1, `qhstart` 0..23 default 22, `qhend` 0..23 default 7; v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
-| Recorder | Own NVS namespace `rec` (so Restore defaults keeps it), blob `day` (100 B, versioned + CRC): every 10 min when changed (stricter than the planned hourly), at each rollover and on `esp_restart`; `RTC_DATA_ATTR` before deep sleep follows in S7 | Today's steps/maxG/time + 7-day ring |
+| `SettingsStore` | NVS namespace `aerodeck` | Schema version (v8 in S7: `nvg` default 0, `scrto` 0..5 index of 10 s/15 s/30 s/1 min/5 min/Never default 1, `raise` default 1, `attref` horizon tilt 0..90° step 15 default 30; v7 in S6: `stride` 30..150 cm default 75; v6 in S5: `volume` 0..4 default 3, `chime` default 1, `qhstart` 0..23 default 22, `qhend` 0..23 default 7; v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| Recorder | Own NVS namespace `rec` (so Restore defaults keeps it), blob `day` (100 B, versioned + CRC): every 10 min when changed (stricter than the planned hourly), at each rollover, on `esp_restart` and at eject (S7; no `RTC_DATA_ATTR` mirror: NVS suffices, ADR-014) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
 | Assets | FAT partition `ffat` (mounted by LilyGoLib, ADR-009), flashed from `data/` with `pio run -t uploadfs` (ADR-013) `/audio/*.wav` (16-bit PCM, mono, 16 kHz; generated by `tools/gen_audio.py`) | master_caution, master_warning, stall, pull_up, bingo_fuel, minimums, traffic, chime |
 
@@ -174,7 +192,14 @@ Default radio profile: EU868 869.525 MHz, SF9, BW125, CR4/5, 14 dBm. US915 profi
 - **Tapes:** custom widget = clipped container with pre-rendered tick labels, scrolled by `translate_y` (no relayout per frame).
 - **Buffers:** LVGL draw buffers in PSRAM, partial refresh, DMA enabled via `setDisplayParams(true, …)`. Invalidate only changed regions.
 - **Fonts:** a HUD 7-segment style font (open licence, converted with `lv_font_conv`) at 2–3 sizes plus Montserrat for text.
-- **NVG:** Theme swaps every palette token to green-on-black and sends `NvgChanged`. Pages restyle through shared `lv_style_t` objects, so they need no per-widget code.
+- **NVG (S7):** a board-level **flush filter** recolours every pixel by luminance onto the black → #00FF66 ramp
+  (`core::NvgColor`, two 256-entry byte tables, written already byte-swapped for the panel). The whole UI, including
+  custom-drawn widgets, turns green within one frame with no per-page code. Brightness drops to 10 %.
+- The annunciator applies `core::NvgStyle`: WARNING inverse with a 2 Hz blink, CAUTION inverse, ADVISORY outline.
+- `NvgChanged` is still sent.
+- **Asynchronous flush (S7):** the recolour/swap and the blocking QSPI `pushColors` run on a core-0 task. LVGL
+  renders the next area into its second buffer meanwhile; `flush_wait_cb` blocks on a semaphore.
+- Measured: PFD 35 fps in day mode and NVG (was 30).
 
 ## 9. Build & configuration
 - Environments: `twatch_ultra` (primary), `twatchs3` (secondary, must compile), `native` (Unity tests of `src/core/` only: `build_src_filter = +<core/>`, `test_build_src = yes`; needs a host GCC, MinGW-w64 on Windows).
@@ -202,7 +227,7 @@ tools/        patch_lilygolib.py, gen_fonts.sh
 | Unit | `pio test -e native` (Unity) | Everything in `src/core/` |
 | Build | `pio run -e twatch_ultra -e twatchs3` | Every slice; CI-ready |
 | On-device | Serial test hooks (`ad test <name>`), debug FPS/heap overlay | Per-slice acceptance scenarios |
-| Power | `PowerService` profiling log + USB meter | NFR-PWR-002 measurement after S7 |
+| Power | `PowerService` profiling log (`ad pwr log`) + USB meter | NFR-PWR-002 measured in S7: `docs/power_report.md` (≈ 34 mA average, ≈ 33 h; target ≤50 mA / ≥22 h met) |
 Each slice's spec-kit `tasks.md` shall include its acceptance scenarios as on-device checks.
 
 ## 11. Architecture decision records (initial)
@@ -220,6 +245,7 @@ Each slice's spec-kit `tasks.md` shall include its acceptance scenarios as on-de
 | ADR-010 | Attitude from the BHI260AP gravity virtual sensor on the UI task; no attitude task (`docs/adr/010-…`). | On-chip fusion, 100 Hz, measured latency ≤44 ms. |
 | ADR-011 | Custom-drawn horizon, ≈238 px cap, 1° heading steps (`docs/adr/011-…`). | Pipeline ceiling ~34 FPS at 280 px; median 30 FPS achieved. |
 | ADR-012 | The SoC Wi-Fi/IP stack is a platform service: allowed only in `src/services/`; power via `PowerService` `Rail::Wifi` (`docs/adr/012-…`). | Identical on every board; an `IBoard` wrapper would have one implementation. |
+| ADR-014 | Deep sleep with an own sequence instead of LilyGoLib's `sleep()` (2 s delay, timer XOR pins, sensor rail cut freezes the hub after wake); button-only wake; OI-1 closed (`docs/adr/014-…`). | Eject in ~0.1 s; timer wake possible for S8; hub healthy after wake. |
 | ADR-013 | Audio assets flashed with `uploadfs` (USB mass storage is compiled out in HW-CDC mode); `FFat` read only in `AudioService` as a platform service; speaker via `IBoard::audio*` over LilyGoLib's `Player` (`docs/adr/013-…`). Amends ADR-009. | Reproducible from a clean checkout; keeps the serial console; one I2S owner. |
 
 New ADRs are appended in `docs/adr/NNN-title.md` by the slice that makes the decision.

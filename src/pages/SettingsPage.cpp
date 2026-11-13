@@ -9,6 +9,7 @@
 #include "services/AlertManager.h"
 #include "services/AudioService.h"
 #include "ui/HapticClick.h"
+#include "ui/ScreenService.h"
 #include "ui/Theme.h"
 
 #ifndef AD_FW_VERSION
@@ -293,6 +294,45 @@ void strideStep(lv_event_t* e)
     SettingsStore::set(SettingKey::Stride, v);
 }
 
+// S7: NVG, screen timeout (10 s … Never), raise to wake.
+void nvgChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::Nvg, lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED) ? 1 : 0);
+}
+void raiseChanged(lv_event_t* e)
+{
+    SettingsStore::set(SettingKey::Raise, lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED) ? 1 : 0);
+}
+void attRefStep(lv_event_t* e)   // horizon tilt ±15° (0 flat … 90 upright)
+{
+    int32_t v = SettingsStore::get(SettingKey::AttRef) + 15 * int32_t(intptr_t(lv_event_get_user_data(e)));
+    v = v < 0 ? 0 : (v > 90 ? 90 : v);
+    SettingsStore::set(SettingKey::AttRef, v);
+}
+void timeoutStep(lv_event_t* e)
+{
+    int32_t v = SettingsStore::get(SettingKey::ScrTo) + int32_t(intptr_t(lv_event_get_user_data(e)));
+    v = v < 0 ? 0 : (v > 5 ? 5 : v);
+    SettingsStore::set(SettingKey::ScrTo, v);
+}
+lv_obj_t* toggle(lv_obj_t* parent, lv_event_cb_t cb)
+{
+    lv_obj_t* sw = lv_switch_create(parent);
+    lv_obj_set_size(sw, Theme::S(56), Theme::S(30));
+    lv_obj_add_event_cb(sw, cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    HapticClick::attach(sw, true);
+    lv_obj_remove_flag(sw, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    return sw;
+}
+void setChecked(lv_obj_t* o, bool on)
+{
+    if (on) {
+        lv_obj_add_state(o, LV_STATE_CHECKED);
+    } else {
+        lv_obj_remove_state(o, LV_STATE_CHECKED);
+    }
+}
+
 // The chime at the current volume (Sample priority: quiet mode, volume Off and quiet hours apply).
 void sampleClicked(lv_event_t*) { AudioService::play(core::Clip::Chime, core::SoundPrio::Sample); }
 
@@ -363,6 +403,34 @@ void SettingsPage::onCreate(lv_obj_t* scr)
     brightVal_ = lv_label_create(ctl);
     lv_obj_add_style(brightVal_, Theme::body(), 0);
     smallButton(ctl, LV_SYMBOL_PLUS, brightStep, reinterpret_cast<void*>(intptr_t(1)));
+
+    // S7: DISPLAY
+    r = row(col, "NVG mode");
+    nvgSw_ = toggle(r, nvgChanged);
+    r = row(col, "Screen timeout");
+    lv_obj_t* tc = lv_obj_create(r);
+    lv_obj_remove_style_all(tc);
+    lv_obj_set_size(tc, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(tc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(tc, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(tc, Theme::S(8), 0);
+    smallButton(tc, LV_SYMBOL_MINUS, timeoutStep, reinterpret_cast<void*>(intptr_t(-1)));
+    timeoutVal_ = lv_label_create(tc);
+    lv_obj_add_style(timeoutVal_, Theme::body(), 0);
+    smallButton(tc, LV_SYMBOL_PLUS, timeoutStep, reinterpret_cast<void*>(intptr_t(1)));
+    r = row(col, "Raise to wake");
+    raiseSw_ = toggle(r, raiseChanged);
+    r = row(col, "Horizon tilt");   // S7: the horizon is level at this face tilt (0° flat … 90° upright)
+    lv_obj_t* hc = lv_obj_create(r);
+    lv_obj_remove_style_all(hc);
+    lv_obj_set_size(hc, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(hc, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(hc, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(hc, Theme::S(8), 0);
+    smallButton(hc, LV_SYMBOL_MINUS, attRefStep, reinterpret_cast<void*>(intptr_t(-1)));
+    attRefVal_ = lv_label_create(hc);
+    lv_obj_add_style(attRefVal_, Theme::body(), 0);
+    smallButton(hc, LV_SYMBOL_PLUS, attRefStep, reinterpret_cast<void*>(intptr_t(1)));
 
     r = row(col, "Diagnostics overlay");
     overlaySw_ = lv_switch_create(r);
@@ -506,6 +574,17 @@ void SettingsPage::refresh()
         return;
     }
     lv_label_set_text_fmt(brightVal_, "%ld%%", (long)((SettingsStore::get(SettingKey::Bright) + 1) * 20));
+    static const char* kTimeout[] = {"10 s", "15 s", "30 s", "1 min", "5 min", "Never"};
+    const int32_t to = SettingsStore::get(SettingKey::ScrTo);
+    lv_label_set_text(timeoutVal_, kTimeout[to >= 0 && to <= 5 ? to : 1]);
+    setChecked(nvgSw_, SettingsStore::getBool(SettingKey::Nvg));
+    setChecked(raiseSw_, SettingsStore::getBool(SettingKey::Raise));
+    lv_label_set_text_fmt(attRefVal_, "%ld°", (long)SettingsStore::get(SettingKey::AttRef));
+    if (ScreenService::status().read().raiseAvailable) {   // n/a without the motion sensor
+        lv_obj_remove_state(raiseSw_, LV_STATE_DISABLED);
+    } else {
+        lv_obj_add_state(raiseSw_, LV_STATE_DISABLED);
+    }
     if (SettingsStore::getBool(SettingKey::Overlay)) {
         lv_obj_add_state(overlaySw_, LV_STATE_CHECKED);
     } else {

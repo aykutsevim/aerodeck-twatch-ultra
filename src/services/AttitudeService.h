@@ -22,4 +22,9 @@ void onImuReady(bool imuOk);        // from the deferred-probe task (core 0)
 const Snapshot<AttitudeSnapshot>& att();
 void tick(uint32_t nowMs);          // svc task: sample watchdog, rate statistics
 void notifyRendered(uint32_t sampleMs);   // UI task: latency of the sample just drawn (R9)
+// S7: every gravity sample is also passed to this tap (UI task, O(1); raise-to-wake). Set by the UI layer.
+using GravityTap = void (*)(float x, float y, float z, uint32_t ms);
+void setGravityTap(GravityTap tap);
+// S7: horizon level at this face tilt from the ground (setting `attref`, 0 = flat as in S1, 90 = upright).
+void setReferenceTilt(uint8_t deg);
 } // namespace AttitudeService

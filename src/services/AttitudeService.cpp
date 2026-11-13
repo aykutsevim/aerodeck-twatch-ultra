@@ -27,7 +27,8 @@ static uint32_t s_seq;
 static uint32_t s_rateWindowMs;
 static volatile uint32_t s_latLast, s_latMax, s_latMaxWindowStart;
 static volatile float s_raw[3];
-static volatile bool s_sweep;   // test hook `ad att sweep`: synthetic motion for FPS measurement (SC-001)
+static volatile bool s_sweep;
+static GravityTap s_tap;   // S7 raise-to-wake (UI task)   // test hook `ad att sweep`: synthetic motion for FPS measurement (SC-001)
 
 static void publish(float pitch, float roll, uint32_t ms)
 {
@@ -68,6 +69,9 @@ static void onGravity(const GravitySample& g, void*)
     s_raw[2] = g.z;
     s_lastSampleMs = g.ms;
     s_samples++;
+    if (s_tap) {
+        s_tap(g.x, g.y, g.z, g.ms);
+    }
     if (s_status != AttStatus::Ok) {
         return;
     }
@@ -137,6 +141,15 @@ void onImuReady(bool imuOk)
 }
 
 const Snapshot<AttitudeSnapshot>& att() { return s_snap; }
+
+void setGravityTap(GravityTap tap) { s_tap = tap; }
+
+void setReferenceTilt(uint8_t deg)
+{
+    // UI task (applySetting); gravity samples also arrive on the UI task: no race.
+    s_att.setReferenceTiltDeg(float(deg));
+    s_att.reset();
+}
 
 void tick(uint32_t now)
 {

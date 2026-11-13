@@ -5,6 +5,11 @@
 #include "board/IBoard.h"
 #include "services/EventBus.h"
 #include "services/AlertManager.h"
+#include "services/AudioService.h"
+#include "services/NetService.h"
+#include "services/RecorderService.h"
+#include "services/SettingsStore.h"
+#include <esp_attr.h>
 #include "services/Log.h"
 #include "services/SerialConsole.h"
 #include "core/BatteryAlarm.h"
@@ -26,6 +31,26 @@ static volatile int s_simChg = -1;   // S4: `ad fuel sim <pct> chg|nochg` chargi
 static core::BatteryAlarm s_battAlarm;   // S4: STALL / PULL UP (FR-012)
 static volatile bool s_alarmEnabled;     // S4: only after the watch face appears
 static uint32_t s_seq;
+
+// S7: eject, profiling
+static QueueHandle_t s_events;
+static volatile bool s_ejecting;
+static SemaphoreHandle_t s_quiesced;
+static PowerService::PreSleepHook s_sleepHooks[4];
+static uint8_t s_sleepHookCount;
+static volatile bool s_profile;   // `ad pwr log on`
+static bool s_screenOn = true;    // from ScreenChanged (services do not read UI state)
+struct EjectRecord {              // survives deep sleep (RTC slow memory, not initialised on wake)
+    uint32_t magic;
+    uint32_t requestToSleepMs;    // EjectRequested handled → deep sleep call
+    uint32_t gestureToSleepMs;    // gesture end (event timestamp) → deep sleep call
+    uint32_t recSaveMs;
+    uint32_t quiesceMs;
+    uint32_t wakeInS;
+    uint8_t source;               // 0 gesture, 1 console
+};
+RTC_NOINIT_ATTR static EjectRecord s_ejectRec;
+constexpr uint32_t kEjectMagic = 0xE1EC7007;
 
 static const char* railName(Rail r)
 {
@@ -102,6 +127,8 @@ namespace PowerService {
 void begin()
 {
     s_mutex = xSemaphoreCreateMutex();
+    s_quiesced = xSemaphoreCreateBinary();
+    s_events = EventBus::subscribe(8);
     // FR-017: no feature needs these in S0, so they start OFF. Display and Sensor stay on (touch/IMU).
     const Rail optional[] = {Rail::Lora, Rail::AudioAmp, Rail::Gnss, Rail::Nfc, Rail::Wifi};
     for (Rail r : optional) {
@@ -129,8 +156,19 @@ uint8_t refcount(Rail r) { return s_ref[size_t(r)]; }
 
 void setRailHook(Rail r, RailHook fn) { s_hooks[size_t(r)] = fn; }
 
+static void eject(uint8_t source, uint32_t gestureMs);
+static void profileLine(uint32_t nowMs);
+
 void tick(uint32_t nowMs)
 {
+    Event e;
+    while (s_events && xQueueReceive(s_events, &e, 0) == pdTRUE) {
+        if (e.type == EventType::EjectRequested) {
+            eject(uint8_t(e.a), e.b);
+        } else if (e.type == EventType::ScreenChanged) {
+            s_screenOn = e.a != 0;
+        }
+    }
     if (nowMs - s_lastPollMs < 1000) {
         return;
     }
@@ -174,6 +212,112 @@ void tick(uint32_t nowMs)
     p.seq = ++s_seq;
     s_snap.write(p);
     EventBus::publish(EventType::PowerSnapshotUpdated);
+    if (s_profile) {
+        profileLine(nowMs);
+    }
+}
+
+// S7 (FR-018, NFR-PWR-004): one line per second. The AXP2101 has no battery current ADC: ma=n/a (research R9).
+static void profileLine(uint32_t nowMs)
+{
+    const PowerSnapshot p = s_snap.read();
+    char flow[12];
+    if (std::isnan(p.fuelFlowPctPerH)) {
+        snprintf(flow, sizeof flow, "n/a");
+    } else {
+        snprintf(flow, sizeof flow, "%.1f", p.fuelFlowPctPerH);
+    }
+    char ma[8];
+    if (p.pmu.battmA == core::kCurrentUnavailable) {
+        snprintf(ma, sizeof ma, "n/a");
+    } else {
+        snprintf(ma, sizeof ma, "%d", int(p.pmu.battmA));
+    }
+    LOGI("pwr", "prof t=%lu pct=%u mv=%u chg=%d vbus=%d flow=%s scr=%s nvg=%d "
+                "rails=lora:%u,amp:%u,gnss:%u,nfc:%u,wifi:%u ma=%s",
+         (unsigned long)(nowMs / 1000), unsigned(p.pmu.battPct), unsigned(p.pmu.battmV), p.pmu.charging ? 1 : 0,
+         p.pmu.vbus ? 1 : 0, flow, s_screenOn ? "on" : "off", SettingsStore::getBool(core::SettingKey::Nvg) ? 1 : 0,
+         unsigned(s_ref[size_t(Rail::Lora)] > 0), unsigned(s_ref[size_t(Rail::AudioAmp)] > 0),
+         unsigned(s_ref[size_t(Rail::Gnss)] > 0), unsigned(s_ref[size_t(Rail::Nfc)] > 0),
+         unsigned(s_ref[size_t(Rail::Wifi)] > 0), ma);
+}
+
+bool addPreSleepHook(PreSleepHook fn)
+{
+    if (!fn || s_sleepHookCount >= 4) {
+        return false;
+    }
+    s_sleepHooks[s_sleepHookCount++] = fn;
+    return true;
+}
+
+bool ejecting() { return s_ejecting; }
+
+void uiQuiesced()
+{
+    if (s_quiesced) {
+        xSemaphoreGive(s_quiesced);
+    }
+}
+
+// svc task. Service steps get <= 500 ms of wall time (later steps are skipped and logged), then the UI gets
+// <= 200 ms to quiesce, then the board sleeps (research R6; FR-008: < 2 s from the gesture).
+static void eject(uint8_t source, uint32_t gestureMs)
+{
+    const uint32_t t0 = millis();
+    const uint32_t deadline = t0 + 500;
+    LOGW("pwr", "eject (%s)", source == 0 ? "gesture" : "console");
+    const bool saved = RecorderService::saveNow("eject");
+    const uint32_t recMs = millis() - t0;
+    if (int32_t(millis() - deadline) < 0) {
+        AudioService::stop(core::SoundPrio::Sample, "eject");
+        board().hapticStop();
+        if (NetService::status().read().busy == NetBusy::Setup) {
+            NetService::stopSetup();
+        }
+    } else {
+        LOGW("pwr", "eject: audio/haptic/net stop skipped (deadline)");
+    }
+    uint32_t wakeIn = 0;
+    uint8_t hooks = 0;
+    for (uint8_t i = 0; i < s_sleepHookCount; i++) {
+        if (int32_t(millis() - deadline) >= 0) {
+            LOGW("pwr", "eject: hook %u skipped (deadline)", unsigned(i));
+            continue;
+        }
+        const uint32_t w = s_sleepHooks[i]();
+        hooks++;
+        if (w > 0 && (wakeIn == 0 || w < wakeIn)) {
+            wakeIn = w;
+        }
+    }
+    // UI quiesce: it stops LVGL, waits for the last transfer and turns the panel off.
+    xSemaphoreTake(s_quiesced, 0);   // drop a stale give
+    const uint32_t q0 = millis();
+    s_ejecting = true;
+    const bool q = xSemaphoreTake(s_quiesced, pdMS_TO_TICKS(200)) == pdTRUE;
+    const uint32_t qMs = millis() - q0;
+
+    uint8_t mask = core::kWakeButton;
+    if (core::hasCap(board().caps(), core::Cap::ImuWakeInterrupt)) {
+        mask |= core::kWakeImu;
+    }
+    if (wakeIn > 0) {
+        mask |= core::kWakeTimer;
+    }
+    const uint32_t now = millis();
+    s_ejectRec = EjectRecord{kEjectMagic, now - t0, gestureMs ? now - gestureMs : 0, recMs, qMs, wakeIn, source};
+    LOGW("pwr", "eject: rec %s %lu ms; audio/haptic/net stopped; hooks=%u wake_in=%lu s; ui quiesced%s %lu ms; "
+                "sleeping at +%lu ms",
+         saved ? "saved" : "NOT saved", (unsigned long)recMs, unsigned(hooks), (unsigned long)wakeIn,
+         q ? "" : " (timeout)", (unsigned long)qMs, (unsigned long)(now - t0));
+    Serial.flush();
+    delay(20);
+    if (!board().deepSleep(mask, wakeIn)) {
+        LOGE("pwr", "eject unsupported on this board; staying awake");
+        s_ejectRec.magic = 0;
+        s_ejecting = false;
+    }
 }
 
 static void cmdFuel(int, const char* const*, core::Reply& r)
@@ -218,8 +362,49 @@ static void cmdFuelSim(int argc, const char* const* argv, core::Reply& r)
     r.ok();
 }
 
+static void cmdEject(int, const char* const*, core::Reply& r)
+{
+    r.ok();
+    r.line("ejecting");
+    EventBus::publish(EventType::EjectRequested, 1, millis());
+}
+
+static void cmdWake(int, const char* const*, core::Reply& r)
+{
+    char b[180];
+    const core::WakeCause c = board().wakeCause();
+    if (c != core::WakeCause::PowerOn && s_ejectRec.magic == kEjectMagic) {
+        snprintf(b, sizeof b,
+                 "wake=%s eject_ms=%lu gesture_to_sleep_ms=%lu rec_save_ms=%lu quiesce_ms=%lu wake_in=%lu src=%s",
+                 core::wakeCauseName(c), (unsigned long)s_ejectRec.requestToSleepMs,
+                 (unsigned long)s_ejectRec.gestureToSleepMs, (unsigned long)s_ejectRec.recSaveMs,
+                 (unsigned long)s_ejectRec.quiesceMs, (unsigned long)s_ejectRec.wakeInS,
+                 s_ejectRec.source == 0 ? "gesture" : "console");
+    } else {
+        snprintf(b, sizeof b, "wake=%s", core::wakeCauseName(c));
+    }
+    r.ok();
+    r.line(b);
+}
+
+static void cmdPwrLog(int, const char* const* argv, core::Reply& r)
+{
+    if (strcmp(argv[0], "on") == 0) {
+        s_profile = true;
+    } else if (strcmp(argv[0], "off") == 0) {
+        s_profile = false;
+    } else {
+        r.err("expected on|off");
+        return;
+    }
+    r.ok();
+}
+
 void registerCommands()
 {
+    SerialConsole::add("eject", 0, cmdEject);
+    SerialConsole::add("wake", 0, cmdWake);
+    SerialConsole::add("pwr log", 1, cmdPwrLog);
     SerialConsole::add("fuel sim", 1, cmdFuelSim);
     SerialConsole::add("fuel", 0, cmdFuel);
 }

@@ -16,9 +16,13 @@ enum class EventType : uint16_t {
     ClockChanged,             // S1: clock set via serial / S2: sync
     NetStatusChanged,         // S2: NetService status snapshot updated
     WeatherUpdated,           // S3: a weather fetch completed (a = WxResult)
-    AlertRaised,              // S4: a = AlertId (new, re-armed or updated)
+    AlertRaised,              // S4: a = AlertId (new, re-armed or updated); S7: b = level if new/re-armed and unacked, else 0
     AlertCleared,             // S4: a = AlertId
     AlertAcked,               // S4: a = number newly acknowledged
+    NvgChanged,               // S7: a = 0 off / 1 on (UI applySetting → subscribers, log)
+    EjectRequested,           // S7: a = source (0 gesture, 1 console) → svc (PowerService::eject)
+    ScreenChanged,            // S7: a = 0 off / 1 on, b = cause (UI → svc, profiling log)
+    ScreenCommand,            // S7: a = 0 off, 1 on, 2 raise (console `ad screen …` → UI)
 };
 
 struct Event {

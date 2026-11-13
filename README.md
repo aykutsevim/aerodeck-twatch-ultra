@@ -93,6 +93,20 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
   time, and a 7-day bar chart (today green; tap a bar for that day). Days start at local midnight; the last 7 days
   are kept and survive restarts (saved every 10 min; Restore defaults keeps them). Set your stride in Settings →
   RECORDER → Stride (0.30–1.50 m, default 0.75 m).
+- **Screen timeout & raise-to-wake (S7):** the screen turns off after 15 s without input (Settings → Screen
+  timeout: 10 s / 15 s / 30 s / 1 min / 5 min / Never). Raise your wrist to look at the watch, or press the button,
+  to turn it back on. The press that wakes the screen does nothing else, and touches on a dark screen are ignored.
+  A new caution or warning also turns the screen on.
+- **NVG night mode (S7):** Settings → NVG mode (or `ad nvg on`) turns everything phosphor green on black at 10 %
+  brightness. Warnings blink inverse, cautions are inverse, advisories are outlined.
+- **Pull to Eject (S7):** the yellow/black striped handle at the top of the watch face puts the watch into deep
+  sleep. **Double-tap it** (it shows ARMED and vibrates), then within 3 s **pull it down**. Today's recorder data is
+  saved first. Press the button to wake it; the watch face is back in about 3.5 s. While an alert is shown, the alert
+  bar sits just below the handle.
+- **Horizon tilt (S7):** the horizon is level when the watch face is tilted 30° from the ground (your natural
+  reading angle). Change it in Settings → Horizon tilt (0° = level when lying flat … 90° = level when held
+  upright).
+- **Battery:** measured currents and the battery-life estimate are in [docs/power_report.md](docs/power_report.md).
 - **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
@@ -131,6 +145,11 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad rec` · `ad rec save` | Flight recorder: today, the last 7 days, sensor state, live g · save now |
 | `ad rec sim steps <n>` · `ad rec sim g <x.x>` · `ad rec rollover` · `ad rec clear` | Test hooks: add steps, inject a peak, act as if midnight passed, erase the recorder |
 | `ad fuel sim <pct\|off> [chg\|nochg]` | Test hook: simulate the battery level (and charging) |
+| `ad screen` · `ad screen on\|off\|raise` · `ad screen trace on\|off` | Screen state (timeout, raise, NVG, brightness, wake latency) · test hooks: force on/off, inject a raise, stream gravity at 20 Hz |
+| `ad nvg on\|off` | NVG night mode (persisted) |
+| `ad eject` · `ad wake` · `ad boot` | Eject now (same as the gesture) · cause of the last wake and the eject timing · boot-to-watch-face time |
+| `ad pwr log on\|off` | 1 Hz power profile: battery %, mV, charging, drain rate, screen, NVG, supplies |
+| `ad probe s7 sleep\|nvg\|day\|wake\|i2c` | Test hooks: raw deep sleep, NVG filter on/off, wake cause, I2C bus scan |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
 | `ad att sweep <on\|off>` | Test hook: synthetic horizon motion for FPS measurement |
@@ -143,7 +162,8 @@ Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md)
 [S3 additions](specs/004-metar-weather/contracts/serial_commands.md) ·
 [S4 additions](specs/005-alert-haptics/contracts/serial_commands.md) ·
 [S5 additions](specs/006-gpws-audio/contracts/serial_commands.md) ·
-[S6 additions](specs/007-flight-recorder/contracts/serial_commands.md).
+[S6 additions](specs/007-flight-recorder/contracts/serial_commands.md) ·
+[S7 additions](specs/008-nvg-eject-power/contracts/serial_commands.md).
 
 ## Project layout
 

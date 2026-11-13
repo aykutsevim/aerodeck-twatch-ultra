@@ -64,6 +64,18 @@ public:
     virtual bool configureMotion(float accelHz, MotionInfo& info) = 0;
     virtual bool stepCount(uint32_t& out) = 0;
     virtual bool takePeakG(float& peak, float& last, float& rangeG) = 0;
+    // S7 (contracts/board_interface.md). UI task: false = AMOLED sleep-in + panel enable low (rail kept on),
+    // true = wake. Takes the I2C lock.
+    virtual void setDisplayOn(bool on) = 0;
+    // S7: while on, every flushed LVGL buffer is recoloured by core::NvgColor::apply before it is pushed.
+    virtual void setNvgFilter(bool on) = 0;
+    // S7: svc task, last step of PowerService::eject(). wakeMask: core::kWakeButton | kWakeImu | kWakeTimer;
+    // timerSec > 0 adds a timer wake. Never returns on success; false = deep sleep unsupported on this board.
+    virtual bool deepSleep(uint8_t wakeMask, uint32_t timerSec) = 0;
+    // S7: why this boot happened (cached at begin()).
+    virtual core::WakeCause wakeCause() const = 0;
+    // Diagnostics (`ad probe s7 i2c`): addresses that ACK on the shared I2C bus. Default: not supported.
+    virtual uint8_t i2cScan(uint8_t* out, uint8_t max) { (void)out; (void)max; return 0; }
     virtual ~IBoard() = default;
 };
 

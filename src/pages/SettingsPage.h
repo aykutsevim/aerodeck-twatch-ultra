@@ -15,6 +15,10 @@ public:
 private:
     lv_obj_t* brightVal_ = nullptr;
     lv_obj_t* overlaySw_ = nullptr;
+    lv_obj_t* nvgSw_ = nullptr;      // S7: NVG mode
+    lv_obj_t* timeoutVal_ = nullptr; // S7: screen timeout label (-/+ buttons)
+    lv_obj_t* raiseSw_ = nullptr;    // S7: raise to wake
+    lv_obj_t* attRefVal_ = nullptr;  // S7: horizon tilt label (-/+ 15°)
     lv_obj_t* logDd_ = nullptr;
     lv_obj_t* tzVal_ = nullptr;      // S2: zone name (button label)
     lv_obj_t* wxVal_ = nullptr;      // S3: weather station (button label)

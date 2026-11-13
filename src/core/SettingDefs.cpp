@@ -29,6 +29,11 @@ static const SettingDef kDefs[] = {
     {"qhend", SettingType::U8, 7, 0, 23, 0, false, true},      // quiet hours end (exclusive)
     // S6 (schema 7)
     {"stride", SettingType::U8, 75, 30, 150, 0, false, true},  // stride length in cm (Flight Miles)
+    // S7 (schema 8)
+    {"nvg", SettingType::Bool, 0, 0, 1, 0, false, true},       // NVG night mode
+    {"scrto", SettingType::U8, 1, 0, 5, 0, false, true},       // screen timeout index: 10/15/30/60/300 s/Never
+    {"raise", SettingType::Bool, 1, 0, 1, 0, false, true},     // raise-to-wake
+    {"attref", SettingType::U8, 30, 0, 90, 15, false, true},   // horizon level at this face tilt (deg, 0 flat)
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 

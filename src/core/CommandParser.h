@@ -20,7 +20,7 @@ class CommandParser {
 public:
     static constexpr size_t kMaxLine = 300;   // S3: `ad wx decode "<METAR>"` (raw reports up to 255 chars)
     static constexpr int kMaxTokens = 12;   // "ad simfail" + 8 names + headroom
-    static constexpr size_t kMaxCommands = 48;
+    static constexpr size_t kMaxCommands = 72;   // S7: 57 registered
 
     // pattern: space-separated tokens after "ad", e.g. "set list".
     bool add(const char* pattern, uint8_t minArgs, Handler fn);

@@ -2,6 +2,17 @@
 
 namespace core {
 
+const char* wakeCauseName(WakeCause c)
+{
+    switch (c) {
+    case WakeCause::PowerOn: return "poweron";
+    case WakeCause::Button: return "button";
+    case WakeCause::Imu: return "imu";
+    case WakeCause::Timer: return "timer";
+    default: return "other";
+    }
+}
+
 const char* periphName(Periph p)
 {
     switch (p) {

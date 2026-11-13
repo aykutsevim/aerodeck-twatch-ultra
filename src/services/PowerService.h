@@ -39,5 +39,14 @@ void enforceIdleRails();
 // S4: start the STALL / PULL UP alarm (called when the watch face first appears, spec edge case).
 void enableBatteryAlarm();
 void tick(uint32_t nowMs);
-void registerCommands();   // `ad fuel`, `ad fuel sim`
+void registerCommands();   // `ad fuel`, `ad fuel sim`; S7: `ad eject`, `ad wake`, `ad pwr log on|off`
+
+// S7 eject (FR-008/009, research R6). EjectRequested (UI gesture or console) → eject() on the svc task.
+// Pre-sleep hooks run in the eject sequence; each returns the wanted wake-up in seconds (0 = none). ≤ 4 hooks.
+using PreSleepHook = uint32_t (*)();
+bool addPreSleepHook(PreSleepHook fn);
+// Quiesce handshake with the UI task: while ejecting() is true the UI stops LVGL, turns the display off and calls
+// uiQuiesced() once. If deep sleep turns out to be unsupported, ejecting() goes false again and the UI resumes.
+bool ejecting();
+void uiQuiesced();
 } // namespace PowerService
