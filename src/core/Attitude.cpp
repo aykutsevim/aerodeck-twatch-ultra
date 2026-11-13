@@ -12,12 +12,22 @@ static float wrap180(float d)
     return d;
 }
 
+void Attitude::setReferenceTiltDeg(float deg)
+{
+    tiltDeg_ = deg;
+    tiltSin_ = std::sin(deg / kR2D);
+    tiltCos_ = std::cos(deg / kR2D);
+}
+
 AttitudeOut Attitude::update(float gx, float gy, float gz)
 {
     const float g[3] = {gx, gy, gz};
     const float ax = map_.sx * g[map_.ix];
-    const float ay = map_.sy * g[map_.iy];
-    const float az = map_.sz * g[map_.iz];
+    const float my = map_.sy * g[map_.iy];
+    const float mz = map_.sz * g[map_.iz];
+    // Reference tilt: rotate about x so that up = (0, -sin t, cos t) becomes (0, 0, 1).
+    const float ay = my * tiltCos_ + mz * tiltSin_;
+    const float az = -my * tiltSin_ + mz * tiltCos_;
 
     const float rawPitch = std::atan2(-ay, std::sqrt(ax * ax + az * az)) * kR2D;
     const bool vertical = std::fabs(rawPitch) > kVerticalDeg;

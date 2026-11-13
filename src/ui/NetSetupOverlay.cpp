@@ -68,6 +68,8 @@ void begin()
     lv_obj_add_flag(s_root, LV_OBJ_FLAG_HIDDEN);
 }
 
+bool isShown() { return s_root && !lv_obj_has_flag(s_root, LV_OBJ_FLAG_HIDDEN); }
+
 void update(const NetStatus& st)
 {
     if (!s_root) {

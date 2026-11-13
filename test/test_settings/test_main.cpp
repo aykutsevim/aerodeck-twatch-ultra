@@ -240,7 +240,7 @@ static void test_schema_v6_audio()
 // S6 schema v7: stride (additive).
 static void test_schema_v7_stride()
 {
-    TEST_ASSERT_EQUAL(7, kSchemaVersion);
+    TEST_ASSERT_TRUE(kSchemaVersion >= 7);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(6, 7, true)));
     const SettingDef& d = settingDef(SettingKey::Stride);
     TEST_ASSERT_EQUAL_STRING("stride", d.key);
@@ -256,6 +256,43 @@ static void test_schema_v7_stride()
     TEST_ASSERT_TRUE(validateSetting(SettingKey::Stride, 150));
     TEST_ASSERT_FALSE(validateSetting(SettingKey::Stride, 29));
     TEST_ASSERT_FALSE(validateSetting(SettingKey::Stride, 151));
+}
+
+// S7 schema v8: NVG, screen timeout index, raise-to-wake (additive; Wi-Fi and other keys kept on migration).
+static void test_schema_v8_display()
+{
+    TEST_ASSERT_EQUAL(8, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(7, 8, true)));
+    struct {
+        SettingKey k;
+        const char* name;
+        SettingType t;
+        int32_t def, min, max;
+    } rows[] = {
+        {SettingKey::Nvg, "nvg", SettingType::Bool, 0, 0, 1},
+        {SettingKey::ScrTo, "scrto", SettingType::U8, 1, 0, 5},
+        {SettingKey::Raise, "raise", SettingType::Bool, 1, 0, 1},
+        {SettingKey::AttRef, "attref", SettingType::U8, 30, 0, 90},
+    };
+    for (auto& r : rows) {
+        const SettingDef& d = settingDef(r.k);
+        TEST_ASSERT_EQUAL_STRING(r.name, d.key);
+        TEST_ASSERT_EQUAL(int(r.t), int(d.type));
+        TEST_ASSERT_EQUAL(r.def, d.def);
+        TEST_ASSERT_EQUAL(r.min, d.min);
+        TEST_ASSERT_EQUAL(r.max, d.max);
+        TEST_ASSERT_TRUE(d.editable);
+        TEST_ASSERT_FALSE(d.secret);
+        TEST_ASSERT_EQUAL(int(r.k), findSettingKey(r.name));
+        TEST_ASSERT_EQUAL(r.def, sanitizeSetting(r.k, 0, false));   // migration v7→v8: missing → default
+        TEST_ASSERT_FALSE(validateSetting(r.k, r.max + 1));
+    }
+    // Restore defaults (FR-022): NVG off, 15 s, raise on.
+    TEST_ASSERT_EQUAL(0, settingDef(SettingKey::Nvg).def);
+    TEST_ASSERT_EQUAL(1, settingDef(SettingKey::ScrTo).def);
+    TEST_ASSERT_EQUAL(1, settingDef(SettingKey::Raise).def);
+    // Keys from earlier schemas keep their stored values (sanitize keeps a valid present value).
+    TEST_ASSERT_EQUAL(120, sanitizeSetting(SettingKey::Stride, 120, true));
 }
 
 static void test_s0_settings_have_no_step()
@@ -291,6 +328,7 @@ int main()
     RUN_TEST(test_schema_v5_haptics);
     RUN_TEST(test_schema_v6_audio);
     RUN_TEST(test_schema_v7_stride);
+    RUN_TEST(test_schema_v8_display);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

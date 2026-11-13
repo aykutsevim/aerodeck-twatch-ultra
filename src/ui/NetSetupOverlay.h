@@ -7,4 +7,5 @@
 namespace NetSetupOverlay {
 void begin();
 void update(const NetStatus& st);   // call on NetStatusChanged
+bool isShown();                     // S7: the screen must not time out while shown (FR-005)
 } // namespace NetSetupOverlay

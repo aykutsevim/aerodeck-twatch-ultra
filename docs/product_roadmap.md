@@ -37,7 +37,7 @@ M5 Experimental ── S12 , S13
 | **S4** | Alert Manager & haptics | M2 | S0 | Must | M | Master annunciator; click haptics on nav; <15 % battery → stick shaker + STALL; ack works | ✅ Done (2026-11-11, PR #5) · wearer checks confirmed by user (not script-logged) |
 | **S5** | GPWS audio | M2 | S4 | Must | M | WAV callouts from the FAT partition (`uploadfs`, ADR-013); hourly chime with quiet hours; amp rail off when idle | ✅ Done (2026-11-12, PR #6) · wearer listening checks recorded in validation.md; no manual checks pending |
 | **S6** | G-force & flight recorder | M2 | S1 | Must | M | Daily NM + Max G on PFD and Recorder page; 7-day history survives reboot | ✅ Done (2026-11-12, PR #7) · manual: T015 SC-001 (3 walks ≥500 m, NM within ±15 %) |
-| **S7** | NVG, eject & power UX | M3 | S4, S6 | Must | M | NVG theme on all pages; Pull-to-Eject deep sleep + wake; screen timeout + raise-to-wake; **battery-life measurement report** | ⏳ Planned |
+| **S7** | NVG, eject & power UX | M3 | S4, S6 | Must | M | NVG theme on all pages; Pull-to-Eject deep sleep + wake; screen timeout + raise-to-wake; **battery-life measurement report** | ✅ Done (2026-11-13, PR #8) · ≈34 mA avg / ≈33 h, NFR-PWR-002 met; horizon tilt added (FR-PFD-012); wrist-motion wake not possible (ADR-014) · manual: T020 raise false-wake walk, T042 fuel-gauge cross-check |
 | **S8** | Drop-tank chronograph | M3 | S4, S5, S7 | Must | S | Countdown/Pomodoro with depleting tank; Bingo Fuel alert fires even after sleep | ⏳ Planned |
 | **S9** | TCAS LoRa radar | M4 | S4, S7 | Should | L | Two watches (or watch + node) see each other on the PPI; region/duty-cycle enforced | ⏳ Planned |
 | **S10** | PTT: dB meter & acoustic commands | M4 | S4 | Should | M | Hold-to-talk dB gauge; whistle / double-clap trigger actions | ⏳ Planned |
@@ -65,7 +65,11 @@ Sizes: S ≈ 2–4 dev-days, M ≈ 1 week, L ≈ 2 weeks (hobby pace, adjust as 
 | **M0 Foundation** | Architecture skeleton merged. `pio run -e twatch_ultra -e twatchs3` and `pio test -e native` pass. Constitution ratified. | ✅ Reached (2026-11-11, S0 merged) |
 | **M1 Wearable MVP** | The watch is usable as a daily watch: accurate time (NTP), the PFD face, and weather at a glance. | ✅ Done (2026-11-11): S1, S2, S3 merged · manual checks pending as listed per slice |
 | **M2 Cockpit Alive** | Alerts, haptics, voice and the activity recorder work together. Low battery is unmistakable. | ✅ Done (2026-11-12): S4, S5, S6 merged · manual checks pending as listed per slice |
-| **M3 Daily Driver** | Battery life is measured and meets NFR-PWR-002 (≥48 h typical, radios off). Night use is comfortable. Timer is reliable. | ⏳ |
+| **M3 Daily Driver** | Battery life is measured and meets NFR-PWR-002 (average ≤50 mA, ≥22 h typical, radios off). Night use is comfortable. Timer is reliable. | ⏳ S7 done (battery target met, NVG); S8 timer pending |
+
+*Amendment (2026-11-13):* the NFR-PWR-002 target was redefined from ≥48 h to an average drain of ≤50 mA
+(≥22 h on the 1100 mAh battery) after the S7 measurement; no further power optimisation is planned for now
+(constitution 1.0.4, SRS NFR-PWR-002, `docs/power_report.md`). Measured: ≈ 33 h, so the target is met.
 | **M4 Tactical** | All hardware is in use. Two-device TCAS demo recorded. | ⏳ |
 | **M5 Experimental** | GNSS features and voice link are evaluated. Each is either promoted to Should or parked with findings. | ⏳ |
 

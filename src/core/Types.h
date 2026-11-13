@@ -40,6 +40,14 @@ constexpr int16_t kCurrentUnavailable = INT16_MIN;
 
 struct BootResult { bool pmuOk; bool safeMode; uint16_t failedMask; };
 
+// S7: why the chip started (deep-sleep wake source or a normal power-on/reset).
+enum class WakeCause : uint8_t { PowerOn, Button, Imu, Timer, Other };
+const char* wakeCauseName(WakeCause c);
+// S7: IBoard::deepSleep wake-source mask bits.
+constexpr uint8_t kWakeButton = 1u << 0;
+constexpr uint8_t kWakeImu = 1u << 1;
+constexpr uint8_t kWakeTimer = 1u << 2;
+
 const char* periphName(Periph p);
 const char* periphStateName(PeriphState s);
 bool periphOptional(Periph p);

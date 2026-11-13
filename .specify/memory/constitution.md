@@ -1,23 +1,26 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.2 → 1.0.3
-Bump rationale: PATCH: Technical Constraints storage line aligned with the accepted ADR-009 (assets on the FAT
-  `ffat` partition, not LittleFS) and ADR-013 (assets flashed with `uploadfs`). No principle or rule changed;
-  found by /speckit-analyze for slice S5 (finding C1).
+Version change: 1.0.3 → 1.0.4
+Bump rationale: PATCH: the NFR-PWR-002 battery-life target quoted in Principle III is redefined as an
+  average drain of ≤50 mA, i.e. ≥22 h typical use on the 1100 mAh battery (was ≥48 h). This was the wearer's
+  decision after the S7 measurement (docs/power_report.md); no further power optimisation is planned for now.
+  The principle itself (claims backed by measurement) is unchanged.
 
-Modified principles: none
-Modified sections:
-  Technical Constraints: Storage (LittleFS partition → FAT `ffat` partition, ADR-009/ADR-013)
+Modified principles: III. Battery Is a Feature (target value only)
+Modified sections: none
 Added sections: none
 Removed sections: none
 
+Affected canonical documents updated in the same change: SRS NFR-PWR-002, roadmap M3, power report,
+  S7 spec/plan/research/quickstart/tasks/validation.
 Templates reviewed (not modified, per command scope):
   ✅ .specify/templates/plan-template.md: no conflict
   ✅ .specify/templates/spec-template.md: no conflict
   ✅ .specify/templates/tasks-template.md: no conflict
 
 History:
+  1.0.3 (2026-11-12): Technical Constraints storage aligned with ADR-009/ADR-013 (FAT `ffat`, `uploadfs`).
   1.0.2 (2026-11-11): screen corners rounded r = 64 px (Technical Constraints: Hardware).
   1.0.1 (2026-11-11): screen corrected to 410×502 portrait (LilyGoLib rotation 0); LVGL pin corrected to 9.6.0.
   1.0.0 (2026-11-11): initial ratification (8 principles, Technical Constraints, Workflow & Quality Gates, Governance).
@@ -61,8 +64,8 @@ and keeps features independently replaceable.
   only while a consumer holds a `RailLease`. Rails MUST be switched only by `PowerService`.
 - Wi-Fi MUST NOT stay associated. It is brought up for a transaction and turned off afterwards.
 - Every feature that keeps a radio or amplifier active MUST define its duty cycle in its plan.
-- Battery-life claims MUST be backed by measurement (NFR-PWR-002 target: ≥48 h typical use with
-  radios off).
+- Battery-life claims MUST be backed by measurement (NFR-PWR-002 target: average drain ≤50 mA,
+  ≥22 h typical use with radios off).
 
 **Rationale:** A watch that dies by afternoon is unusable, however good its features.
 
@@ -184,4 +187,4 @@ Portability keeps the S3 path open.
 - **Runtime guidance:** `docs/speckit_slice_prompts.md` provides per-slice prompts. AD-SAS-001
   provides design detail.
 
-**Version**: 1.0.3 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-11
+**Version**: 1.0.4 | **Ratified**: 2026-11-11 | **Last Amended**: 2026-11-13

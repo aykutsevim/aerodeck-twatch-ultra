@@ -108,6 +108,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | FR-PFD-009 | S | The PFD shall show a charging annunciator and a low-battery CAUTION annunciator, driven by the Alert Manager. |
 | FR-PFD-010 | C | If GNSS has a fix, the heading tape may optionally show true course over ground (user setting). Seconds then move to a numeric readout. |
 | FR-PFD-011 | M | While the attitude reference is initialising, the ADI shall show **ATT ALIGN**. If motion sensing is unavailable it shall show a level picture with **ATT FAIL**, and every other PFD function shall keep working. *(Added in S1.)* |
+| FR-PFD-012 | S | The horizon shall read level at a wearer-selected face tilt from the ground (setting `attref`, 0°–90° in 15° steps; 0° = level when lying flat as in S1, 90° = level when held upright; default 30°, the natural reading angle). *(Added in S7 at the wearer's request.)* |
 
 ### 3.3 Time & connectivity (TIM / NET)
 | ID | Pri | Requirement |
@@ -158,7 +159,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | FR-REC-002 | M | The system shall track the peak acceleration magnitude in **g** (gravity-included magnitude, sampled at ≥50 Hz), and keep the daily **Max G** and the time it occurred. |
 | FR-REC-003 | M | Daily counters shall reset at local midnight. The previous 7 days shall be kept. |
 | FR-REC-004 | M | A recorder page shall show today's NM, steps, Max G, and a 7-day bar chart. |
-| FR-REC-005 | M | Recorder data shall survive deep sleep and reboot (written to RTC memory before sleep and to flash at least hourly). *(S6: saved every 10 min when changed, at each rollover and on every planned restart; **Restore defaults keeps the recorder data** (own NVS namespace); deep sleep is handled in S7.)* |
+| FR-REC-005 | M | Recorder data shall survive deep sleep and reboot (written to RTC memory before sleep and to flash at least hourly). *(S6: saved every 10 min when changed, at each rollover and on every planned restart; **Restore defaults keeps the recorder data** (own NVS namespace); deep sleep is handled in S7.)* *(S7: saved to NVS at eject; verified across deep sleep and wake.)* |
 
 ### 3.7 Chronograph — "Drop Tank" timer (CHR)
 | ID | Pri | Requirement |
@@ -174,11 +175,11 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | :--- | :--- | :--- |
 | FR-NVG-001 | M | An NVG toggle shall switch the whole UI to a black background with monochrome phosphor green (`#00FF66`) and set display brightness to 10 % of maximum. |
 | FR-NVG-002 | M | NVG state shall persist and apply at once to every page, including live widgets. |
-| FR-NVG-003 | S | Alert colours shall stay recognisable in NVG mode (WARNING shown with blink/inverse instead of red). |
+| FR-NVG-003 | S | Alert colours shall stay recognisable in NVG mode (WARNING shown with blink/inverse instead of red). *(S7: WARNING inverse with a 2 Hz blink, CAUTION inverse and steady, ADVISORY green outline on black.)* |
 | FR-EJT-001 | M | A yellow/black striped "PULL TO EJECT" control at the top of the screen, triggered by double-tap then swipe-down, shall start emergency deep sleep. |
 | FR-EJT-002 | M | Eject shall: save recorder/timer state, cut power to the display, LoRa, audio amplifier and GNSS via the PMIC, configure wake sources, and enter ESP32-S3 deep sleep within 2 s. |
 | FR-EJT-003 | M | Wake sources shall include the physical button and an IMU wrist-tilt / motion interrupt (where the board supports it). On wake, the system shall restore state and show the PFD (FR-PLT-001). |
-| FR-EJT-004 | S | Auto screen-off after a configurable idle time (default 15 s), with wrist-raise to wake the screen. |
+| FR-EJT-004 | S | Auto screen-off after a configurable idle time (default 15 s), with wrist-raise to wake the screen. *(S7: steps 10 s / 15 s / 30 s / 1 min / 5 min / Never; the button press that wakes the screen is consumed; touches on a dark screen are ignored; a new caution or warning wakes the screen.)* |
 
 ### 3.9 TCAS / tactical radar (TCS)
 | ID | Pri | Requirement |
@@ -232,9 +233,9 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
 | NFR-PWR-001 | M | Each power-hungry peripheral (LoRa, audio amp, GNSS, NFC, Wi-Fi, mic) shall be powered only while a consumer holds a reference to it (reference-counted power gating). |
-| NFR-PWR-002 | M | With TCAS, audio and GNSS off and screen-off timeout on, typical daily use shall reach **≥48 h** of battery life. This is a target to measure, not a guarantee. |
+| NFR-PWR-002 | M | With TCAS, audio and GNSS off and screen-off timeout on, typical daily use shall keep the average battery drain at **≤50 mA**, i.e. **≥22 h** of battery life on the 1100 mAh battery. This is a target to measure, not a guarantee. *(Amended in S7 from ≥48 h, wearer decision after the measurement; no further power optimisation planned for now: constitution 1.0.4, `docs/power_report.md`.)* |
 | NFR-PWR-003 | M | The audio amplifier rail shall be off whenever no audio is playing. |
-| NFR-PWR-004 | S | Firmware shall expose a power-profiling mode that logs rail states and battery current once per second. |
+| NFR-PWR-004 | S | Firmware shall expose a power-profiling mode that logs rail states and battery current once per second. *(S7: `ad pwr log`; the AXP2101 has no battery-current ADC, so the line shows %, mV and the drain rate, and currents are measured externally; see `docs/power_report.md`.)* |
 
 ### 4.3 Reliability (REL)
 | ID | Pri | Requirement |
@@ -293,7 +294,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | S4 | Alert Manager & haptics | FR-ALR-001…004, FR-HAP-001…003 |
 | S5 | GPWS audio | FR-AUD-001…005, NFR-PWR-003 |
 | S6 | G-force & flight recorder | FR-REC-001…005, FR-PFD-008 |
-| S7 | NVG, eject & power UX | FR-NVG-001…003, FR-EJT-001…004, NFR-PWR-002/004 |
+| S7 | NVG, eject & power UX | FR-NVG-001…003, FR-EJT-001…004, NFR-PWR-002/004, FR-PFD-012 |
 | S8 | Drop tank chronograph | FR-CHR-001…005 |
 | S9 | TCAS LoRa radar | FR-TCS-001…008, NFR-REG-001, NFR-SEC-003 |
 | S10 | PTT: dB meter & acoustic commands | FR-PTT-001…003, FR-PTT-005 |
@@ -306,7 +307,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ## 7. Open issues
 | # | Issue | Proposed resolution |
 | :--- | :--- | :--- |
-| OI-1 | Can the BHI260AP wake the ESP32-S3 from deep sleep directly (interrupt pin routing on Ultra)? | Verify in S7. Fall back to button-only wake plus timer wake for the chronograph. |
+| OI-1 | Can the BHI260AP wake the ESP32-S3 from deep sleep directly (interrupt pin routing on Ultra)? | **Closed in S7 (ADR-014):** the INT line reaches GPIO8 and the firmware has wake-up sensors, but a time-boxed spike did not wake the chip. Button-only wake (plus the timer wake for S8); the spike stays behind `AERODECK_IMU_WAKE`. |
 | OI-2 | Is 60 FPS full-horizon redraw feasible at 410×502 over QSPI? | Measure in S1. NFR-PERF-001 guarantees 30 FPS. S0 measured full-screen page transitions at 15–28 FPS with LilyGoLib's 1/6-screen DMA buffers; S1 must tune rendering (buffer size, partial invalidation, lighter styles). |
 | OI-3 | On-device keyword spotting memory/CPU budget. | S10 starts with FFT acoustic gestures. Keyword spotting is a stretch goal. |
 | OI-4 | Codec2 on Arduino-ESP32 2.x build integration. | S13 is experimental and gated by a spike. |

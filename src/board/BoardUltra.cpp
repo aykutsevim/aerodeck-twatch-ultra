@@ -1,4 +1,4 @@
-// T-Watch Ultra implementation of IBoard (wraps LilyGoLib `instance`).
+﻿// T-Watch Ultra implementation of IBoard (wraps LilyGoLib `instance`).
 #ifdef ARDUINO_T_WATCH_S3_ULTRA
 
 #include <Arduino.h>
@@ -8,8 +8,10 @@
 #include "board/IBoard.h"
 #include "board/I2cLock.h"
 #include "board/I2cRecover.h"
+#include "core/NvgColor.h"
 #include "core/SimFail.h"
 #include <bosch/bhy2_parse.h>
+#include <esp_sleep.h>
 
 using namespace core;
 
@@ -34,6 +36,7 @@ public:
     {
         BootResult r{true, safeMode, 0};
         simMask_ = simFailMask;
+        wakeCause_ = readWakeCause();
 
         // R3: LilyGoLib asserts if the PMU is missing; probe first so we never enter that path.
         stage(BootStage::PmuProbe);
@@ -74,9 +77,14 @@ public:
         stage(BootStage::DisplayInit);
         beginLvglHelper(instance);
         wrapTouchRead();
+        wrapFlush();
         lvgl_ = true;
         displayOk_ = true;
 
+        if (wakeCause_ == WakeCause::Button) {
+            I2cLock lock;
+            instance.pmu.clearIrqStatus();   // S7: the wake press must not arrive again as a click (R6)
+        }
         instance.onEvent(&BoardUltra::onDeviceEvent, this, POWER_EVENT);
 
         for (uint8_t i = 0; i < uint8_t(Periph::Count); i++) {
@@ -158,7 +166,7 @@ public:
         I2cLock lock;
         info.steps = instance.sensor.onResultEvent(SensorBHI260AP::STEP_COUNTER, &BoardUltra::onStep, this) &&
                      instance.sensor.configure(BHY2_SENSOR_ID_STC, 1.0f, 0);
-        instance.sensor.configureRange(BHY2_SENSOR_ID_ACC, 16);   // ±16 g if the firmware accepts it
+        instance.sensor.configureRange(BHY2_SENSOR_ID_ACC, 16);   // Â±16 g if the firmware accepts it
         float scale = instance.sensor.getScaling(BHY2_SENSOR_ID_ACC);
         if (!(scale > 0.0f)) {
             scale = 1.0f / 4096.0f;
@@ -167,11 +175,24 @@ public:
                      instance.sensor.configure(BHY2_SENSOR_ID_ACC, accelHz, 0);
         const SensorConfig cfg = instance.sensor.getConfigure(BHY2_SENSOR_ID_ACC);
         if (cfg.range > 0) {
-            // getScaling() keeps reporting the default ±8 g step (1/4096 g) after configureRange: measured at rest
-            // |a| = 0.50 with ±16 g (S6 T012). Full scale = range over the int16 span.
+            // getScaling() keeps reporting the default Â±8 g step (1/4096 g) after configureRange: measured at rest
+            // |a| = 0.50 with Â±16 g (S6 T012). Full scale = range over the int16 span.
             scale = float(cfg.range) / 32768.0f;
         }
         accelScale_ = scale;
+#ifdef AERODECK_IMU_WAKE
+        // S7 spike (research R7): which wake-up sensors does the loaded firmware offer?
+        {
+            const uint8_t ids[] = {BHY2_SENSOR_ID_WRIST_TILT_GESTURE, BHY2_SENSOR_ID_WAKE_GESTURE, BHY2_SENSOR_ID_SIG};
+            for (uint8_t id : ids) {
+                const bool present = instance.sensor.onResultEvent(SensorBHI260AP::BoschSensorID(id), &BoardUltra::onWakeEvent, this);
+                log_i("imuwake: sensor %u %s", unsigned(id), present ? "present" : "absent");
+                if (present && !wakeSensor_) {
+                    wakeSensor_ = id;
+                }
+            }
+        }
+#endif
         info.accelScale = scale;
         info.rangeG = float(cfg.range);
         rangeG_ = info.rangeG;
@@ -264,7 +285,7 @@ public:
                 case Periph::Gnss: ok = instance.initGPS(); break;
                 case Periph::Lora: ok = instance.initLoRa(); break;
                 case Periph::SdCard:
-                    // Card-detect via the expander: HIGH = no card inserted → ABSENT, not FAILED.
+                    // Card-detect via the expander: HIGH = no card inserted â†’ ABSENT, not FAILED.
                     instance.io.pinMode(EXPANDS_SD_DET, INPUT);
                     if (instance.io.digitalRead(EXPANDS_SD_DET) == HIGH) {
                         absent_ |= (1u << uint8_t(Periph::SdCard));
@@ -286,16 +307,22 @@ public:
 
     uint32_t caps() const override
     {
-        return Cap::Lora | Cap::Haptics | Cap::Speaker | Cap::Mic | Cap::Nfc | Cap::Gnss | Cap::SdCard |
-               Cap::ImuStepCounter | Cap::Amoled;
+        uint32_t c = Cap::Lora | Cap::Haptics | Cap::Speaker | Cap::Mic | Cap::Nfc | Cap::Gnss | Cap::SdCard |
+                     Cap::ImuStepCounter | Cap::Amoled;
+#ifdef AERODECK_IMU_WAKE
+        if (wakeSensor_) {
+            c |= uint32_t(Cap::ImuWakeInterrupt);   // research R7 spike (default off until promoted, ADR-014)
+        }
+#endif
+        return c;
     }
 
     const char* name() const override { return "T-Watch Ultra"; }
 
     DisplayInfo display() const override
     {
-        // Rotated size as LVGL sees it. DISP_WIDTH/DISP_HEIGHT (502×410) describe the panel before rotation;
-        // LilyGoLib's default rotation 0 is portrait, i.e. 410 wide × 502 tall.
+        // Rotated size as LVGL sees it. DISP_WIDTH/DISP_HEIGHT (502Ã—410) describe the panel before rotation;
+        // LilyGoLib's default rotation 0 is portrait, i.e. 410 wide Ã— 502 tall.
         // The Ultra AMOLED has rounded corners with a 64 px radius.
         return DisplayInfo{instance.width(), instance.height(), false, 64};
     }
@@ -305,6 +332,7 @@ public:
         if (pct > 100) {
             pct = 100;
         }
+        waitFlushIdle();   // S7: brightness is a QSPI panel command; the flush task may be using the bus
         I2cLock lock;
         instance.setBrightness(uint8_t((uint32_t(pct) * DEVICE_MAX_BRIGHTNESS_LEVEL) / 100));
     }
@@ -392,7 +420,215 @@ public:
 
     bool lvglReady() const override { return lvgl_; }
 
+    // S7: screen off/on while running (research R4). The display rail stays on (LilyGoLib advice).
+    void setDisplayOn(bool on) override
+    {
+        if (!displayOk_ || on == displayOn_) {
+            return;
+        }
+        if (!on) {
+            waitFlushIdle();   // never sleep the panel in the middle of a transfer
+        }
+        I2cLock lock;   // the panel enable is on the XL9555 expander
+        if (on) {
+            instance.wakeupDisplay();
+        } else {
+            instance.sleepDisplay();
+        }
+        displayOn_ = on;
+    }
+
+    void setNvgFilter(bool on) override { g_nvgOn = on; }
+
+    // S7: deep sleep without LilyGoLib's sleep() (2 s delay; timer XOR pins; sensor rail off). Research R6.
+    bool deepSleep(uint8_t wakeMask, uint32_t timerSec) override
+    {
+        if (!vendorOk_) {
+            return false;
+        }
+        waitFlushIdle();
+        I2cLock lock;
+        instance.pmu.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+        if (wakeMask & kWakeButton) {
+            instance.pmu.enableIRQ(XPOWERS_AXP2101_PKEY_SHORT_IRQ);
+        }
+        instance.touch.sleep();
+        instance.LilyGoDispQSPI::sleep();
+        instance.LilyGoDispQSPI::end();
+        instance.uninstallSD();
+        const uint8_t expands[] = {EXPANDS_DRV_EN, EXPANDS_DISP_EN};
+        for (uint8_t pin : expands) {
+            instance.io.digitalWrite(pin, LOW);
+        }
+        instance.disablePowerMeasure();
+        instance.pmu.enableSleep();
+        // The display rail (ALDO2) stays on: cutting it raises the sleep current by ~600 ÂµA (LilyGoLib note).
+        instance.powerControl(POWER_HAPTIC_DRIVER, false);
+        instance.powerControl(POWER_GPS, false);
+        instance.powerControl(POWER_SPEAK, false);
+        instance.powerControl(POWER_NFC, false);
+        instance.powerControl(POWER_SD_CARD, false);
+        instance.powerControl(POWER_RADIO, false);
+        // Sensor hub: cutting its rail (as LilyGoLib's sleep() does) leaves the BHI260AP delivering frozen
+        // gravity/accelerometer values after the wake boot (validation T006). Keep it powered and idle instead:
+        // stop its virtual sensors so it draws only its sleep current.
+        if (periph(Periph::Imu) == PeriphState::Ok) {
+            instance.sensor.configure(BHY2_SENSOR_ID_GRA, 0, 0);
+            instance.sensor.configure(BHY2_SENSOR_ID_ACC, 0, 0);
+            instance.sensor.configure(BHY2_SENSOR_ID_STC, 0, 0);
+#ifdef AERODECK_IMU_WAKE
+            // Spike (research R7): only the wake-up FIFO may assert the (active-low) INT line on GPIO8.
+            if ((wakeMask & kWakeImu) && wakeSensor_) {
+                instance.sensor.setInterruptCtrl(BHY2_ICTL_DISABLE_FIFO_NW | BHY2_ICTL_DISABLE_STATUS_FIFO |
+                                                 BHY2_ICTL_DISABLE_DEBUG | BHY2_ICTL_ACTIVE_LOW);
+                instance.sensor.configure(wakeSensor_, 1.0f, 0);
+            }
+#endif
+        }
+        // RTC backup charging stays on (unlike the vendor default): the clock must survive.
+        instance.pmu.clearIrqStatus();
+
+        Serial1.end();
+        SPI.end();
+        Wire.end();
+        const uint8_t pins[] = {DISP_D0, DISP_D1, DISP_D2, DISP_D3, DISP_SCK, DISP_CS, DISP_TE, 37,
+                                RTC_INT, NFC_INT, NFC_CS, MIC_SCK, MIC_DAT, I2S_BCLK, I2S_WCLK, I2S_DOUT,
+                                SD_CS, SDA, SCL, MOSI, MISO, SCK, GPS_TX, GPS_RX, GPS_PPS,
+                                LORA_CS, LORA_RST, LORA_BUSY, LORA_IRQ, TP_INT};
+        for (uint8_t pin : pins) {
+            gpio_reset_pin(gpio_num_t(pin));
+            pinMode(pin, OPEN_DRAIN);
+        }
+        uint64_t ext1 = 0;
+        if (wakeMask & kWakeButton) {
+            ext1 |= 1ULL << PMU_INT;
+        }
+        if (wakeMask & kWakeImu) {
+            ext1 |= 1ULL << SENSOR_INT;
+        } else {
+            gpio_reset_pin(gpio_num_t(SENSOR_INT));
+            pinMode(SENSOR_INT, OPEN_DRAIN);
+        }
+        if (ext1) {
+            esp_sleep_enable_ext1_wakeup(ext1, ESP_EXT1_WAKEUP_ANY_LOW);
+        }
+        if ((wakeMask & kWakeTimer) && timerSec > 0) {
+            esp_sleep_enable_timer_wakeup(uint64_t(timerSec) * 1000000ULL);
+        }
+        esp_deep_sleep_start();
+        return false;   // not reached
+    }
+
+    WakeCause wakeCause() const override { return wakeCause_; }
+
+    uint8_t i2cScan(uint8_t* out, uint8_t max) override
+    {
+        uint8_t n = 0;
+        I2cLock lock;
+        for (uint8_t a = 1; a < 127 && n < max; a++) {
+            Wire.beginTransmission(a);
+            if (Wire.endTransmission() == 0) {
+                out[n++] = a;
+            }
+        }
+        return n;
+    }
+
 private:
+    static WakeCause readWakeCause()
+    {
+        switch (esp_sleep_get_wakeup_cause()) {
+        case ESP_SLEEP_WAKEUP_EXT1: {
+            uint64_t st = esp_sleep_get_ext1_wakeup_status();
+            if (st & (1ULL << PMU_INT)) {
+                return WakeCause::Button;
+            }
+            if (st & (1ULL << SENSOR_INT)) {
+                return WakeCause::Imu;
+            }
+            return WakeCause::Other;
+        }
+        case ESP_SLEEP_WAKEUP_TIMER: return WakeCause::Timer;
+        case ESP_SLEEP_WAKEUP_UNDEFINED: return WakeCause::PowerOn;
+        default: return WakeCause::Other;
+        }
+    }
+
+    // S7: our own flush, replacing LilyGoLib's disp_flush (LV_Helper_v9.cpp): same _SWAP_COLORS byte swap and
+    // pushColors, plus the NVG filter (research R1). Reading the original callback would need LVGL's private
+    // display struct, which is avoided on purpose.
+    // Asynchronous: the flush callback (UI task) hands the buffer to a core-0 task that recolours/swaps and pushes
+    // it (pushColors blocks on the QSPI DMA). LVGL meanwhile renders the next area into its second buffer. Before
+    // it reuses a buffer, LVGL calls flushWait(), which blocks until the task is done with the previous flush.
+    struct FlushJob {
+        lv_display_t* d;
+        lv_area_t area;
+        uint8_t* px;
+    };
+    void wrapFlush()
+    {
+        lv_display_t* d = lv_display_get_default();
+        if (!d) {
+            return;
+        }
+        s_flushQ = xQueueCreate(1, sizeof(FlushJob));
+        s_flushDone = xSemaphoreCreateBinary();
+        if (s_flushQ && s_flushDone &&
+            xTaskCreatePinnedToCore(flushTask, "flush", 3072, nullptr, 10, nullptr, 0) == pdPASS) {
+            lv_display_set_flush_cb(d, &BoardUltra::asyncFlush);
+            lv_display_set_flush_wait_cb(d, &BoardUltra::flushWait);
+        } else {
+            lv_display_set_flush_cb(d, &BoardUltra::syncFlush);   // fallback: same work on the UI task
+        }
+    }
+    static void convertAndPush(lv_display_t* d, const lv_area_t& a, uint8_t* px)
+    {
+        const uint32_t n = lv_area_get_size(&a);
+        // The panel wants byte-swapped RGB565. In NVG the recolour writes swapped pixels directly (one pass).
+        if (g_nvgOn) {
+            core::NvgColor::applySwapped(reinterpret_cast<uint16_t*>(px), n);
+        } else {
+            lv_draw_sw_rgb565_swap(px, n);
+        }
+        auto* plane = static_cast<LilyGo_Display*>(lv_display_get_user_data(d));
+        plane->pushColors(a.x1, a.y1, lv_area_get_width(&a), lv_area_get_height(&a), reinterpret_cast<uint16_t*>(px));
+    }
+    static void syncFlush(lv_display_t* d, const lv_area_t* area, uint8_t* px)
+    {
+        convertAndPush(d, *area, px);
+        lv_display_flush_ready(d);
+    }
+    static void asyncFlush(lv_display_t* d, const lv_area_t* area, uint8_t* px)
+    {
+        FlushJob j{d, *area, px};
+        g_flushBusy = true;
+        xQueueSend(s_flushQ, &j, portMAX_DELAY);
+    }
+    // LVGL calls this only while disp->flushing is set (one call per flush) and clears the flag afterwards.
+    static void flushWait(lv_display_t*) { xSemaphoreTake(s_flushDone, portMAX_DELAY); }
+    static void flushTask(void*)
+    {
+        FlushJob j;
+        for (;;) {
+            if (xQueueReceive(s_flushQ, &j, portMAX_DELAY) == pdTRUE) {
+                convertAndPush(j.d, j.area, j.px);
+                g_flushBusy = false;
+                xSemaphoreGive(s_flushDone);
+            }
+        }
+    }
+    // UI task: before the panel is put to sleep, let an in-flight transfer finish.
+    static void waitFlushIdle()
+    {
+        for (int i = 0; i < 100 && g_flushBusy; i++) {
+            vTaskDelay(1);
+        }
+    }
+    static volatile bool g_nvgOn;
+    static volatile bool g_flushBusy;
+    static QueueHandle_t s_flushQ;
+    static SemaphoreHandle_t s_flushDone;
+
     void stage(BootStage s)
     {
         if (stageCb_) {
@@ -431,6 +667,8 @@ private:
         GravitySample s{v.x * self->gravityScale_, v.y * self->gravityScale_, v.z * self->gravityScale_, millis()};
         self->gravityCb_(s, self->gravityCtx_);
     }
+
+    static void onWakeEvent(uint8_t id, uint8_t*, uint32_t, uint64_t*, void*) { log_i("imuwake: event %u", id); }
 
     static void onStep(uint8_t, uint8_t* data, uint32_t size, uint64_t*, void* user)
     {
@@ -498,6 +736,9 @@ private:
     bool displayOk_ = false;
     bool lvgl_ = false;
     bool audioReady_ = false;   // S5: Player I2S driver installed
+    bool displayOn_ = true;     // S7
+    volatile uint8_t wakeSensor_ = 0;   // S7 spike: hub wake-up sensor id (0 = none)
+    WakeCause wakeCause_ = WakeCause::PowerOn;
     // S6 motion (written on the UI task by the hub callbacks, read by the recorder on the svc task)
     portMUX_TYPE motionLock_ = portMUX_INITIALIZER_UNLOCKED;
     volatile uint32_t steps_ = 0;
@@ -517,6 +758,10 @@ private:
 };
 
 lv_indev_read_cb_t BoardUltra::origTouchRead_ = nullptr;
+volatile bool BoardUltra::g_nvgOn = false;
+volatile bool BoardUltra::g_flushBusy = false;
+QueueHandle_t BoardUltra::s_flushQ = nullptr;
+SemaphoreHandle_t BoardUltra::s_flushDone = nullptr;
 BoardUltra g_board;
 
 } // namespace

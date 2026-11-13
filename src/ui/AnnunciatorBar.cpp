@@ -1,5 +1,7 @@
 #include "ui/AnnunciatorBar.h"
+#include <Arduino.h>
 #include <lvgl.h>
+#include "core/NvgStyle.h"
 #include "services/AlertManager.h"
 #include "services/HapticService.h"
 #include "ui/Theme.h"
@@ -14,6 +16,7 @@ uint32_t s_seq = UINT32_MAX;
 AlertSnapshot s_snap;     // last read (UI task only)
 size_t s_index;           // cycling position when all are acknowledged
 bool s_flashOn = true;
+bool s_nvg;               // S7: NVG looks (core::NvgStyle)
 
 void colours(core::AlertLevel l, lv_color_t& bg, lv_color_t& fg)
 {
@@ -37,6 +40,25 @@ void render()
     const core::Alert& a = s_snap.items[s_index];
     lv_color_t bg, fg;
     colours(a.level, bg, fg);
+    // S7 (FR-015): in NVG the level is told by shape and motion, not colour (the flush filter makes it green).
+    const core::NvgStyle::AlertLook look = core::NvgStyle::forLevel(a.level, s_nvg, millis());
+    int32_t border = 0;
+    if (s_nvg) {
+        if (look.inverse) {
+            bg = Theme::hudGreen();
+            fg = lv_color_black();
+        } else {   // outline
+            bg = lv_color_black();
+            fg = Theme::hudGreen();
+            border = Theme::S(2);
+        }
+        if (!look.visible) {   // WARNING blink off-phase: dark band
+            bg = lv_color_black();
+            fg = lv_color_black();
+        }
+    }
+    lv_obj_set_style_border_width(s_bar, border, 0);
+    lv_obj_set_style_border_color(s_bar, Theme::hudGreen(), 0);
     lv_obj_set_style_bg_color(s_bar, bg, 0);
     lv_obj_set_style_text_color(s_label, fg, 0);
     if (s_snap.anyUnacked) {
@@ -62,6 +84,14 @@ void flashCb(lv_timer_t*)   // 500 ms: 1 Hz flash while unacknowledged
     if (s_snap.total && s_snap.anyUnacked) {
         s_flashOn = !s_flashOn;
         lv_obj_set_style_bg_opa(s_bar, s_flashOn ? LV_OPA_COVER : LV_OPA_40, 0);
+    }
+}
+
+void blinkCb(lv_timer_t*)   // 250 ms: S7 NVG WARNING blink (2 Hz)
+{
+    if (s_nvg && s_snap.total && s_snap.n && s_snap.items[s_index < s_snap.n ? s_index : 0].level ==
+                                                  core::AlertLevel::Warning) {
+        render();
     }
 }
 
@@ -104,7 +134,23 @@ void begin()
     lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
     lv_timer_create(flashCb, 500, nullptr);
     lv_timer_create(cycleCb, 3000, nullptr);
+    lv_timer_create(blinkCb, core::NvgStyle::kBlinkHalfMs, nullptr);
     update();
+}
+
+void setNvg(bool on)
+{
+    s_nvg = on;
+    if (s_bar) {
+        render();
+    }
+}
+
+void setTopOffset(int32_t px)
+{
+    if (s_bar) {
+        lv_obj_align(s_bar, LV_ALIGN_TOP_MID, 0, px);
+    }
 }
 
 void update()

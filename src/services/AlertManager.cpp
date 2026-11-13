@@ -80,10 +80,11 @@ RaiseResult doRaise(AlertId id, AlertLevel level, const char* text, bool acked)
                                                      : core::patternForLevel(level));
             callout(id, level);
         }
-        EventBus::publish(EventType::AlertRaised, uint32_t(id));
+        // S7: b = level for a new/re-armed, unacknowledged alert (it may wake the screen), 0 otherwise.
+        EventBus::publish(EventType::AlertRaised, uint32_t(id), acked ? 0u : uint32_t(level));
         break;
     case RaiseResult::Updated:
-        EventBus::publish(EventType::AlertRaised, uint32_t(id));
+        EventBus::publish(EventType::AlertRaised, uint32_t(id), 0u);   // S7: an update never wakes the screen
         break;
     case RaiseResult::Full:
         LOGE("alert", "alert set full; dropped id=%u", unsigned(id));

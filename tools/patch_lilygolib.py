@@ -68,4 +68,46 @@ def patch():
     log("patched (%s)" % pioenv)
 
 
+# AERODECK-PATCH-2 (S7): SensorLib 0.3.4 BoschParseCallbackManager::call(sensor_id, data, uint32_t size, ...)
+# shadows the member `size` (entry count) with the data length, so with USE_CUSTOM_VECTOR the loop reads
+# uninitialised malloc'd entries past the end and may call a garbage callback (crash in parseData once 6-byte
+# accelerometer events arrive, heap-layout dependent). Loop over the entry count instead.
+MARKER2 = "AERODECK-PATCH-2"
+REL2 = os.path.join("SensorLib", "src", "bosch", "BoschParseCallbackManager.hpp")
+BUG2 = (
+    "    void call(uint8_t sensor_id, uint8_t *data, uint32_t size, uint64_t *timestamp)\n"
+    "    {\n"
+    "#ifdef USE_CUSTOM_VECTOR\n"
+    "        for (uint32_t i = 0; i < size; i++) {\n"
+)
+FIX2 = (
+    "    void call(uint8_t sensor_id, uint8_t *data, uint32_t size, uint64_t *timestamp)\n"
+    "    {\n"
+    "#ifdef USE_CUSTOM_VECTOR\n"
+    "        // " + MARKER2 + ": `size` (data length) shadowed the entry count\n"
+    "        for (uint32_t i = 0; i < this->size; i++) {\n"
+)
+
+
+def patch_sensorlib():
+    libdeps = env.subst("$PROJECT_LIBDEPS_DIR")  # noqa: F821
+    pioenv = env.subst("$PIOENV")  # noqa: F821
+    path = os.path.join(libdeps, pioenv, REL2)
+    if not os.path.isfile(path):
+        log("SensorLib not in this env; skipping patch 2 (%s)" % pioenv)
+        return
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        text = f.read().replace("\r\n", "\n")
+    if MARKER2 in text:
+        log("SensorLib already patched (%s)" % pioenv)
+        return
+    if BUG2 not in text:
+        log("ERROR: SensorLib callback loop not found in %s. SensorLib changed? Update tools/patch_lilygolib.py" % path)
+        env.Exit(1)  # noqa: F821
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text.replace(BUG2, FIX2, 1))
+    log("SensorLib patched (%s)" % pioenv)
+
+
 patch()
+patch_sensorlib()

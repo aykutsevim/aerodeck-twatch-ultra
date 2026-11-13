@@ -4,6 +4,7 @@
 #include "ui/Page.h"
 #include "ui/widgets/AdiWidget.h"
 #include "ui/widgets/EicasWidget.h"
+#include "ui/widgets/EjectHandle.h"
 #include "ui/widgets/TapeWidget.h"
 
 class PfdPage : public Page {
@@ -25,6 +26,7 @@ private:
     AdiWidget adi_;
     TapeWidget heading_, hour_, minute_;
     EicasWidget eicas_;
+    EjectHandle eject_;   // S7: Pull-to-Eject in the top band
     lv_obj_t* zulu_ = nullptr;
     lv_obj_t* local_ = nullptr;
     lv_timer_t* frame_ = nullptr;

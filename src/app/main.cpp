@@ -1,5 +1,6 @@
 // AeroDeck firmware entry point: boot orchestration (research R3, data-model §6) and the UI loop.
 #include <Arduino.h>
+#include <cstdio>
 #include <cstring>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -29,6 +30,7 @@
 #include "ui/DebugOverlay.h"
 #include "ui/NetSetupOverlay.h"
 #include "ui/PageManager.h"
+#include "ui/ScreenService.h"
 #include "ui/Theme.h"
 
 using namespace core;
@@ -62,11 +64,39 @@ static bool abnormalReset()
 
 static void onStage(BootStage s) { BootGuard::mark(g_boot, s); }
 
+// S7: NVG forces 10 % (FR-013/016); otherwise the stored level (20..100 %).
+static void applyBrightness()
+{
+    const bool nvg = SettingsStore::getBool(SettingKey::Nvg);
+    const uint8_t pct = nvg ? 10 : uint8_t((SettingsStore::get(SettingKey::Bright) + 1) * 20);
+    board().setBrightnessPct(pct);
+    ScreenService::setApplied(nvg, pct);
+}
+
 static void applySetting(SettingKey k)
 {
     switch (k) {
     case SettingKey::Bright:
-        board().setBrightnessPct(uint8_t((SettingsStore::get(k) + 1) * 20));
+        applyBrightness();
+        break;
+    case SettingKey::Nvg: {   // S7 (FR-013/014): flush filter + brightness, from the first frame
+        const bool on = SettingsStore::getBool(k);
+        board().setNvgFilter(on);
+        AnnunciatorBar::setNvg(on);
+        applyBrightness();
+        lv_obj_invalidate(lv_screen_active());
+        lv_obj_invalidate(lv_layer_top());
+        EventBus::publish(EventType::NvgChanged, on ? 1u : 0u);
+        LOGI("nvg", "%s", on ? "on" : "off");
+        break;
+    }
+    case SettingKey::AttRef:
+        AttitudeService::setReferenceTilt(uint8_t(SettingsStore::get(k)));
+        break;
+    case SettingKey::ScrTo:
+    case SettingKey::Raise:
+        ScreenService::configure(uint8_t(SettingsStore::get(SettingKey::ScrTo)),
+                                 SettingsStore::getBool(SettingKey::Raise));
         break;
     case SettingKey::LogLvl:
         Log::setLevel(Lvl(SettingsStore::get(k)));
@@ -79,7 +109,12 @@ static void applySetting(SettingKey k)
     }
 }
 
-static void onButton(void*) { PageManager::buttonPressed(); }
+static void onButton(void*)
+{
+    if (!ScreenService::onButton()) {   // S7: a press that wakes the screen does nothing else (FR-002)
+        PageManager::buttonPressed();
+    }
+}
 
 // Test hook (quickstart V3 automation): `ad nav next|prev|button` → UI task via EventBus.
 static void cmdNav(int, const char* const* argv, Reply& r)
@@ -94,9 +129,12 @@ static void cmdNav(int, const char* const* argv, Reply& r)
     r.ok();
 }
 
+static uint32_t g_bootHomeMs;   // S7: boot (incl. wake from deep sleep) → first watch-face frame, for `ad boot`
+
 static void onFirstHome()
 {
-    LOGI("boot", "boot->home %lu ms", (unsigned long)(esp_timer_get_time() / 1000));
+    g_bootHomeMs = uint32_t(esp_timer_get_time() / 1000);
+    LOGI("boot", "boot->home %lu ms", (unsigned long)g_bootHomeMs);
     PowerService::enableBatteryAlarm();   // S4: STALL / PULL UP only once the face (and the band) is up
 }
 
@@ -159,6 +197,14 @@ void setup()
     DebugOverlay::registerCommands();
     PowerService::registerCommands();
     SerialConsole::add("nav", 1, cmdNav);
+    SerialConsole::add("boot", 0, [](int, const char* const*, Reply& r) {   // S7 (FR-011): wake → PFD time
+        char line[64];
+        snprintf(line, sizeof line, "boot_to_home_ms=%lu wake=%s", (unsigned long)g_bootHomeMs,
+                 core::wakeCauseName(board().wakeCause()));
+        r.ok();
+        r.line(line);
+    });
+    ScreenService::registerCommands();
     SvcTask::addTick(SettingsStore::tick);
     AlertManager::begin();     // S4: before anything raises an alert (TimeService, boot cautions)
     HapticService::begin();
@@ -218,7 +264,11 @@ void setup()
     NetSetupOverlay::begin();
     raiseBootCautions(br, st, mode);
     PageManager::begin();
-    applySetting(SettingKey::Bright);
+    ScreenService::begin();
+    applySetting(SettingKey::Nvg);       // S7: NVG + brightness before the first frame (FR-014)
+    applySetting(SettingKey::ScrTo);
+    applySetting(SettingKey::AttRef);
+    LOGI("boot", "wake=%s", core::wakeCauseName(board().wakeCause()));
     board().onButtonClick(onButton, nullptr);
     enableLoopWDT();   // FR-016: a hung UI loop resets the chip
 
@@ -243,6 +293,21 @@ void loop()
         return;
     }
 
+    // S7 eject quiesce (research R6): stop LVGL and the panel, hand the bus to the svc task, then idle.
+    static bool s_quiet;
+    if (PowerService::ejecting()) {
+        if (!s_quiet) {
+            s_quiet = true;
+            ScreenService::forceOff();   // waits for the last transfer, panel off
+            PowerService::uiQuiesced();
+        }
+        delay(10);
+        return;
+    }
+    if (s_quiet) {   // deep sleep was unsupported: resume
+        s_quiet = false;
+        ScreenService::command(1);
+    }
     board().loop();
     Event e;
     while (xQueueReceive(g_uiQueue, &e, 0) == pdTRUE) {
@@ -264,6 +329,14 @@ void loop()
             g_settings.refresh();
             break;
         case EventType::AlertRaised:
+            if (e.b != 0) {   // S7: only new/re-armed, unacknowledged alerts may wake the screen (FR-004)
+                ScreenService::onAlert(core::AlertLevel(e.b));
+            }
+            AnnunciatorBar::update();
+            break;
+        case EventType::ScreenCommand:
+            ScreenService::command(uint8_t(e.a));
+            break;
         case EventType::AlertCleared:
         case EventType::AlertAcked:
             AnnunciatorBar::update();
@@ -273,6 +346,11 @@ void loop()
         }
     }
     AnnunciatorBar::update();   // cheap seq check (alerts raised before the event queue existed)
-    lv_timer_handler();
-    delay(1);
+    ScreenService::tick(now);
+    if (ScreenService::isOn()) {
+        lv_timer_handler();
+        delay(1);
+    } else {
+        delay(10);   // S7: screen off: no rendering, no touch reads; button/gravity still pumped above
+    }
 }

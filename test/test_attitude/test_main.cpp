@@ -92,6 +92,41 @@ static void test_axis_map_applied()
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, o.rollDeg);
 }
 
+// S7: reference tilt. 90 = upright (level when the watch is held vertical, 12 o'clock up: up = (0,-1,0)).
+static void test_upright_reference()
+{
+    Attitude a;
+    a.setReferenceTiltDeg(90.0f);
+    AttitudeOut o = settle(a, 0, -1, 0);                 // upright, facing the wearer
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.pitchDeg);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.rollDeg);
+    a.reset();
+    o = settle(a, std::sin(30 * kD2R), -std::cos(30 * kD2R), 0);   // turned clockwise 30°: right wing down
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, o.rollDeg);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.pitchDeg);
+    a.reset();
+    o = settle(a, 0, -std::cos(20 * kD2R), std::sin(20 * kD2R));    // top tilted away 20°: nose down
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, -20.0f, o.pitchDeg);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.rollDeg);
+}
+
+static void test_reference_tilt_30()
+{
+    Attitude a;
+    a.setReferenceTiltDeg(30.0f);
+    // Face tilted 30° from the ground, top edge raised: level.
+    AttitudeOut o = settle(a, 0, -std::sin(30 * kD2R), std::cos(30 * kD2R));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.pitchDeg);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.rollDeg);
+    a.reset();
+    o = settle(a, 0, 0, 1);   // lying flat now reads 30° nose down
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, -30.0f, o.pitchDeg);
+    a.reset();
+    a.setReferenceTiltDeg(0.0f);   // 0 = the S1 behaviour
+    o = settle(a, 0, 0, 1);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, o.pitchDeg);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -103,5 +138,7 @@ int main()
     RUN_TEST(test_roll_wrap_does_not_jump);
     RUN_TEST(test_reset);
     RUN_TEST(test_axis_map_applied);
+    RUN_TEST(test_upright_reference);
+    RUN_TEST(test_reference_tilt_30);
     return UNITY_END();
 }

@@ -8,7 +8,9 @@
 #include "board/IBoard.h"
 #include "board/I2cLock.h"
 #include "board/I2cRecover.h"
+#include "core/NvgColor.h"
 #include "core/SimFail.h"
+#include <esp_sleep.h>
 
 using namespace core;
 
@@ -139,6 +141,7 @@ public:
         stage(BootStage::DisplayInit);
         beginLvglHelper(instance);
         wrapTouchRead();
+        wrapFlush();
         lvgl_ = true;
 
         instance.onEvent(&BoardS3::onDeviceEvent, this, POWER_EVENT);
@@ -161,7 +164,29 @@ public:
     void setBrightnessPct(uint8_t pct) override
     {
         if (pct > 100) pct = 100;
-        instance.setBrightness(uint8_t((uint32_t(pct) * DEVICE_MAX_BRIGHTNESS_LEVEL) / 100));
+        brightness_ = uint8_t((uint32_t(pct) * DEVICE_MAX_BRIGHTNESS_LEVEL) / 100);
+        if (displayOn_) {
+            instance.setBrightness(brightness_);
+        }
+    }
+
+    // S7: backlight off/on (LCD; no panel sleep needed for the S3 build).
+    void setDisplayOn(bool on) override
+    {
+        if (on == displayOn_) return;
+        displayOn_ = on;
+        instance.setBrightness(on ? brightness_ : 0);
+    }
+    void setNvgFilter(bool on) override { g_nvgOn = on; }
+    bool deepSleep(uint8_t, uint32_t) override { return false; }   // not validated on the S3 (contract)
+    core::WakeCause wakeCause() const override
+    {
+        switch (esp_sleep_get_wakeup_cause()) {
+        case ESP_SLEEP_WAKEUP_EXT1: return core::WakeCause::Button;
+        case ESP_SLEEP_WAKEUP_TIMER: return core::WakeCause::Timer;
+        case ESP_SLEEP_WAKEUP_UNDEFINED: return core::WakeCause::PowerOn;
+        default: return core::WakeCause::Other;
+        }
     }
 
     void setRail(Rail r, bool on) override
@@ -237,6 +262,33 @@ public:
     bool lvglReady() const override { return lvgl_; }
 
 private:
+    // S7: our own flush callback, identical to LilyGoLib's disp_flush (LV_Helper_v9.cpp, incl. its _SWAP_COLORS
+    // byte swap) plus the NVG filter applied before the swap.
+    // (Reading the original callback needs LVGL's private display struct; that is avoided on purpose.)
+    void wrapFlush()
+    {
+        lv_display_t* d = lv_display_get_default();
+        if (d) {
+            lv_display_set_flush_cb(d, &BoardS3::nvgFlush);
+        }
+    }
+    static void nvgFlush(lv_display_t* d, const lv_area_t* area, uint8_t* px)
+    {
+        // LilyGoLib defines _SWAP_COLORS for this board (Ultra; S3 on IDF 4.x): the panel wants byte-swapped RGB565.
+        // In NVG the recolour writes swapped pixels directly (one pass instead of two; research R1).
+        if (g_nvgOn) {
+            core::NvgColor::applySwapped(reinterpret_cast<uint16_t*>(px), size_t(lv_area_get_size(area)));
+        } else {
+            lv_draw_sw_rgb565_swap(px, lv_area_get_size(area));
+        }
+        auto* plane = static_cast<LilyGo_Display*>(lv_display_get_user_data(d));
+        plane->pushColors(area->x1, area->y1, area->x2 + 1, area->y2 + 1, reinterpret_cast<uint16_t*>(px));
+        lv_display_flush_ready(d);
+    }
+    static volatile bool g_nvgOn;
+    bool displayOn_ = true;
+    uint8_t brightness_ = DEVICE_MAX_BRIGHTNESS_LEVEL;
+
     void stage(BootStage s)
     {
         if (stageCb_) stageCb_(s);
@@ -279,6 +331,7 @@ private:
 };
 
 lv_indev_read_cb_t BoardS3::origTouchRead_ = nullptr;
+volatile bool BoardS3::g_nvgOn = false;
 BoardS3 g_board;
 
 } // namespace

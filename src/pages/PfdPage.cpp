@@ -8,6 +8,7 @@
 #include <cstring>
 #include "core/FlightMath.h"
 #include "services/TimeService.h"
+#include "ui/AnnunciatorBar.h"
 #include "ui/Theme.h"
 #include "ui/fonts/fonts.h"
 
@@ -60,10 +61,14 @@ void PfdPage::onCreate(lv_obj_t* scr)
     maxg_ = smallLabel(scr, L.maxg, "MAX G\n--", LV_ALIGN_TOP_LEFT);
     nm_ = smallLabel(scr, L.nm, "FLT NM\n--", LV_ALIGN_TOP_RIGHT);   // "FLIGHT NM" did not fit the box
     lv_display_add_event_cb(lv_display_get_default(), renderReadyCb, LV_EVENT_RENDER_READY, this);
+    // S7 (FR-006, research R8): the hazard handle fills the top band (the S0 banner zone above the PFD content);
+    // created last so it draws over the instruments while being pulled.
+    eject_.create(scr, 0, 0, Theme::width(), Theme::S(28), Theme::S(100));
 }
 
 void PfdPage::onEnter()
 {
+    AnnunciatorBar::setTopOffset(Theme::S(28));   // S7: alerts sit below the eject handle on the watch face
     frame(true);   // FR-021: no stale values when returning to the PFD
     if (!frame_) {
         frame_ = lv_timer_create(frameCb, 16, this);
@@ -72,6 +77,7 @@ void PfdPage::onEnter()
 
 void PfdPage::onExit()
 {
+    AnnunciatorBar::setTopOffset(0);
     if (frame_) {
         lv_timer_delete(frame_);
         frame_ = nullptr;
