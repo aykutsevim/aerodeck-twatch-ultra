@@ -62,9 +62,11 @@ bool ScreenPolicy::onRaise(uint32_t nowMs)
     return true;
 }
 
-bool ScreenPolicy::onAlert(AlertLevel lvl, uint32_t nowMs)
+bool ScreenPolicy::onAlert(AlertLevel lvl, uint32_t nowMs, bool speaks)
 {
-    if (lvl != AlertLevel::Caution && lvl != AlertLevel::Warning) {
+    const bool wakes =
+        lvl == AlertLevel::Caution || lvl == AlertLevel::Warning || (lvl == AlertLevel::Advisory && speaks);
+    if (!wakes) {
         return false;
     }
     if (on_) {

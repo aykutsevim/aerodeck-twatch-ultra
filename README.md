@@ -114,7 +114,9 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
     **BREAK OVER** (chime) at the end of a break.
   - The timer keeps running on other pages, with the screen off, through restarts and after Pull to Eject: the
     watch wakes itself just before zero. Ejecting in the last 6 s is postponed.
-- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → CHRONO → Settings → PFD.
+- **TCAS LoRa radar (S9):** the **TCAS** page shows a sweeping radar with 4 range rings. Other AeroDeck watches appear as bogeys: a stronger signal is closer. Tap a bogey for its callsign, signal, age and battery. A contact entering the inner ring raises **TRAFFIC** (voice). TCAS is **off by default** (TCAS ON on the page or `ad tcas on`); the radio is powered only while it is on.
+  - Radio: **EU868, 869.525 MHz, 10 dBm**, a beacon every 30 s, at most 1 % airtime per hour. This unit is the 915 MHz hardware variant: in Türkiye it must stay on EU868 (range is shorter, ADR-015). Do not select US915 where that band is not legal.
+- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → CHRONO → TCAS → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
   restore defaults, and firmware/peripheral status.
@@ -157,6 +159,10 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad eject` · `ad wake` · `ad boot` | Eject now (same as the gesture) · cause of the last wake and the eject timing · boot-to-watch-face time |
 | `ad pwr log on\|off` | 1 Hz power profile: battery %, mV, charging, drain rate, screen, NVG, supplies |
 | `ad chrono` · `ad chrono start [s]\|pause\|resume\|reset` · `ad chrono pomo <workS> <breakS>` | Timer state (incl. the last expiry error) · controls; seconds are test hooks |
+| `ad tcas` · `ad tcas on\|off` | TCAS state (radio, region, counters, duty use, contacts) · on/off (persisted) |
+| `ad tcas beacon` · `ad tcas sim <id> <call> <rssi>` · `ad tcas simclear` · `ad tcas interval <s>` | Test hooks: a beacon now (duty gate applies), inject/clear simulated contacts, a temporary interval |
+| `ad set callsign <txt>` · `ad set tcasint\|tcasage\|lorapwr\|lorasf\|lorabw <n>` | TCAS settings (the region clamps the radio values) |
+| `ad probe s9 tx` · `ad probe s9 rx <s>` | Test hooks (TCAS off): 3 beacons with airtime · listen only |
 | `ad probe s8 alarm <s>` | Test hook: deep sleep with only the RTC-alarm wake |
 | `ad probe s7 sleep\|nvg\|day\|wake\|i2c` | Test hooks: raw deep sleep, NVG filter on/off, wake cause, I2C bus scan |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
@@ -173,7 +179,8 @@ Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md)
 [S5 additions](specs/006-gpws-audio/contracts/serial_commands.md) ·
 [S6 additions](specs/007-flight-recorder/contracts/serial_commands.md) ·
 [S7 additions](specs/008-nvg-eject-power/contracts/serial_commands.md) ·
-[S8 additions](specs/009-drop-tank-chrono/contracts/serial_commands.md).
+[S8 additions](specs/009-drop-tank-chrono/contracts/serial_commands.md) ·
+[S9 additions](specs/010-tcas-lora-radar/contracts/serial_commands.md).
 
 ## Project layout
 

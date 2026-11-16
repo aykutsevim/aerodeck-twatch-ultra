@@ -168,9 +168,9 @@ bool onButton()
     return s_policy.onButton(millis());
 }
 
-void onAlert(core::AlertLevel lvl)
+void onAlert(core::AlertLevel lvl, bool speaks)
 {
-    s_policy.onAlert(lvl, millis());
+    s_policy.onAlert(lvl, millis(), speaks);
 }
 
 void command(uint8_t cmd)

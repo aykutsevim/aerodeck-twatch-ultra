@@ -182,6 +182,31 @@ static void test_chrono_alerts()
     TEST_ASSERT_EQUAL(int(AlertId::BreakOver), int(id));
 }
 
+// S9: TRAFFIC advisory — the one advisory that speaks (research R6, FR-010).
+static void test_traffic_alert()
+{
+    const AlertDef* t = alertDef(AlertId::Traffic);
+    TEST_ASSERT_NOT_NULL(t);
+    TEST_ASSERT_EQUAL(44, int(AlertId::Traffic));
+    TEST_ASSERT_EQUAL(int(AlertLevel::Advisory), int(t->level));
+    TEST_ASSERT_EQUAL(int(Pattern::Advisory), int(t->pattern));
+    TEST_ASSERT_EQUAL(int(Clip::Traffic), int(t->voiceClip));
+    TEST_ASSERT_EQUAL_STRING("TRAFFIC", t->text);
+    AlertId id;
+    TEST_ASSERT_TRUE(alertIdFromName("traffic", id));
+    TEST_ASSERT_EQUAL(int(AlertId::Traffic), int(id));
+    TEST_ASSERT_EQUAL(int(Clip::Traffic), int(calloutFor(AlertId::Traffic, AlertLevel::Advisory)));
+    // every other advisory stays silent (incl. a caution-level def raised at advisory level)
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::TimeUnsync, AlertLevel::Advisory)));
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::Test1, AlertLevel::Advisory)));
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::BingoFuel, AlertLevel::Advisory)));
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId(200), AlertLevel::Advisory)));
+    TEST_ASSERT_EQUAL(int(Clip::None), int(calloutFor(AlertId::Traffic, AlertLevel::None)));
+    // caution / warning unchanged
+    TEST_ASSERT_EQUAL(int(Clip::Traffic), int(calloutFor(AlertId::Traffic, AlertLevel::Caution)));
+    TEST_ASSERT_EQUAL(int(Clip::Stall), int(calloutFor(AlertId::Stall, AlertLevel::Warning)));
+}
+
 static void test_names()
 {
     AlertId id;
@@ -258,6 +283,7 @@ int main()
     RUN_TEST(test_text_truncated);
     RUN_TEST(test_table);
     RUN_TEST(test_chrono_alerts);
+    RUN_TEST(test_traffic_alert);
     RUN_TEST(test_names);
     RUN_TEST(test_callout_for);
     RUN_TEST(test_clip_names);

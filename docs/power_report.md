@@ -90,6 +90,35 @@ without the eject is small (≈ 1 mA), so habitual ejecting at night is what giv
 4. **Raise-to-wake false wakes** while walking add screen-on time. Their rate is still to be measured (pending
    manual check: 5-minute walk).
 
+## S9: TCAS radio (2026-11-16)
+
+Same method (USB meter at 5 V, battery full, screen off, watch idle, branch `010-tcas-lora-radar`). TCAS listens
+continuously and sends one 18-byte beacon (≈ 0.19 s at 10 dBm, EU868) every 30 s.
+
+| State | 5 V (meter) | Battery equivalent |
+| :--- | :-: | :-: |
+| Screen off, **TCAS off** (radio rail off) | 34 mA | ≈ 44 mA |
+| Screen off, **TCAS on** (receiving, between beacons) | 40 mA | ≈ 52 mA |
+| During a beacon (brief meter peak) | 54 mA | — |
+
+- TCAS costs about **6 mA at 5 V (≈ 8 mA from the battery)**, almost all of it continuous receiving. The beacons
+  add little: 0.19 s every 30 s is 0.6 % of the time.
+- **Ejected:** the pre-sleep hook stops the radio and the rail is off. The sleep current is unchanged (wearer
+  check), and TCAS resumes after the wake with the duty history kept (`duty=22.6s` before and after).
+
+Day estimate with the S7 profile, using the S8 screen-off value (34 mA at 5 V):
+
+| Scenario | Average battery current | Battery life (1100 mAh) |
+| :--- | :-: | :-: |
+| TCAS off, overnight eject | ≈ 31 mA | ≈ 35 h |
+| **TCAS on while worn (16 h), overnight eject** | **≈ 36 mA** | **≈ 30 h** |
+| TCAS on 24 h, no eject | ≈ 53 mA | ≈ 21 h (misses the target) |
+
+**Verdict:** with TCAS on during the day and the usual overnight eject, the ≤ 50 mA / ≥ 22 h target
+(NFR-PWR-002) is **met**. Leaving TCAS on around the clock without ejecting misses it by about 3 mA. TCAS is off by
+default, and turning it off or ejecting at night stays within the target. No further power work is planned
+(wearer decision).
+
 ## Pending manual checks
 
 - **Fuel-gauge discharge per state, off USB** (≥ 2 h each; ejected ≥ 24 h) to cross-check the USB-meter numbers.

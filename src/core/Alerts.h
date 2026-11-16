@@ -27,6 +27,7 @@ enum class AlertId : uint8_t {
     PullUp = 41,
     BingoFuel = 42,   // S8: chronograph expired / Pomodoro work done
     BreakOver = 43,   // S8: Pomodoro break done
+    Traffic = 44,     // S9: TCAS contact entered the inner ring (the one advisory that speaks)
     Test1 = 60,
     Test2 = 61,
     Test3 = 62,

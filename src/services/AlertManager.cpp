@@ -81,7 +81,11 @@ RaiseResult doRaise(AlertId id, AlertLevel level, const char* text, bool acked)
             callout(id, level);
         }
         // S7: b = level for a new/re-armed, unacknowledged alert (it may wake the screen), 0 otherwise.
-        EventBus::publish(EventType::AlertRaised, uint32_t(id), acked ? 0u : uint32_t(level));
+        // S9: bit 8 = the alert speaks (a speaking advisory, TRAFFIC, may wake the screen too).
+        EventBus::publish(EventType::AlertRaised, uint32_t(id),
+                          acked ? 0u
+                                : uint32_t(level) |
+                                      (core::calloutFor(id, level) != core::Clip::None ? 0x100u : 0u));
         break;
     case RaiseResult::Updated:
         EventBus::publish(EventType::AlertRaised, uint32_t(id), 0u);   // S7: an update never wakes the screen
