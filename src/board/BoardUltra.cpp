@@ -12,6 +12,8 @@
 #include "core/SimFail.h"
 #include <bosch/bhy2_parse.h>
 #include <esp_sleep.h>
+#include <driver/rtc_io.h>
+#include "core/ClockMath.h"
 
 using namespace core;
 
@@ -84,6 +86,11 @@ public:
         if (wakeCause_ == WakeCause::Button) {
             I2cLock lock;
             instance.pmu.clearIrqStatus();   // S7: the wake press must not arrive again as a click (R6)
+        }
+        if (periph(Periph::Rtc) == PeriphState::Ok) {
+            I2cLock lock;   // S8: an RTC alarm from a timer wake must not stay armed or hold INT low
+            instance.rtc.disableAlarm();
+            instance.rtc.resetAlarm();
         }
         instance.onEvent(&BoardUltra::onDeviceEvent, this, POWER_EVENT);
 
@@ -166,7 +173,7 @@ public:
         I2cLock lock;
         info.steps = instance.sensor.onResultEvent(SensorBHI260AP::STEP_COUNTER, &BoardUltra::onStep, this) &&
                      instance.sensor.configure(BHY2_SENSOR_ID_STC, 1.0f, 0);
-        instance.sensor.configureRange(BHY2_SENSOR_ID_ACC, 16);   // Â±16 g if the firmware accepts it
+        instance.sensor.configureRange(BHY2_SENSOR_ID_ACC, 16);   // ±16 g if the firmware accepts it
         float scale = instance.sensor.getScaling(BHY2_SENSOR_ID_ACC);
         if (!(scale > 0.0f)) {
             scale = 1.0f / 4096.0f;
@@ -175,8 +182,8 @@ public:
                      instance.sensor.configure(BHY2_SENSOR_ID_ACC, accelHz, 0);
         const SensorConfig cfg = instance.sensor.getConfigure(BHY2_SENSOR_ID_ACC);
         if (cfg.range > 0) {
-            // getScaling() keeps reporting the default Â±8 g step (1/4096 g) after configureRange: measured at rest
-            // |a| = 0.50 with Â±16 g (S6 T012). Full scale = range over the int16 span.
+            // getScaling() keeps reporting the default ±8 g step (1/4096 g) after configureRange: measured at rest
+            // |a| = 0.50 with ±16 g (S6 T012). Full scale = range over the int16 span.
             scale = float(cfg.range) / 32768.0f;
         }
         accelScale_ = scale;
@@ -321,8 +328,8 @@ public:
 
     DisplayInfo display() const override
     {
-        // Rotated size as LVGL sees it. DISP_WIDTH/DISP_HEIGHT (502Ã—410) describe the panel before rotation;
-        // LilyGoLib's default rotation 0 is portrait, i.e. 410 wide Ã— 502 tall.
+        // Rotated size as LVGL sees it. DISP_WIDTH/DISP_HEIGHT (502×410) describe the panel before rotation;
+        // LilyGoLib's default rotation 0 is portrait, i.e. 410 wide × 502 tall.
         // The Ultra AMOLED has rounded corners with a 64 px radius.
         return DisplayInfo{instance.width(), instance.height(), false, 64};
     }
@@ -462,7 +469,7 @@ public:
         }
         instance.disablePowerMeasure();
         instance.pmu.enableSleep();
-        // The display rail (ALDO2) stays on: cutting it raises the sleep current by ~600 ÂµA (LilyGoLib note).
+        // The display rail (ALDO2) stays on: cutting it raises the sleep current by ~600 µA (LilyGoLib note).
         instance.powerControl(POWER_HAPTIC_DRIVER, false);
         instance.powerControl(POWER_GPS, false);
         instance.powerControl(POWER_SPEAK, false);
@@ -488,6 +495,22 @@ public:
         // RTC backup charging stays on (unlike the vendor default): the clock must survive.
         instance.pmu.clearIrqStatus();
 
+        // S8 timer wake (research R2): the PCF85063 alarm (crystal) instead of the drifting RC sleep timer. The alarm
+        // is relative to the RTC's own reading, so it also works when the clock was never set (U3).
+        bool rtcAlarm = false;
+        if ((wakeMask & kWakeTimer) && timerSec > 0 && periph(Periph::Rtc) == PeriphState::Ok) {
+            RTC_DateTime d = instance.rtc.getDateTime();
+            const int64_t now = core::utcFromCivil(d.getYear(), d.getMonth(), d.getDay(), d.getHour(),
+                                                   d.getMinute(), d.getSecond());
+            int y, mo, dd, h, mi, sec;
+            core::civilFromUtc(now + int64_t(timerSec), y, mo, dd, h, mi, sec);
+            instance.rtc.disableAlarm();
+            instance.rtc.resetAlarm();
+            instance.rtc.setAlarm(uint8_t(h), uint8_t(mi), uint8_t(sec), uint8_t(dd), uint8_t(0xFF));   // 0xFF = PCF85063_NO_ALARM (weekday unused)
+            instance.rtc.enableAlarm();
+            rtcAlarm = true;
+        }
+
         Serial1.end();
         SPI.end();
         Wire.end();
@@ -496,6 +519,9 @@ public:
                                 SD_CS, SDA, SCL, MOSI, MISO, SCK, GPS_TX, GPS_RX, GPS_PPS,
                                 LORA_CS, LORA_RST, LORA_BUSY, LORA_IRQ, TP_INT};
         for (uint8_t pin : pins) {
+            if (rtcAlarm && pin == RTC_INT) {
+                continue;   // S8: the RTC alarm line wakes us
+            }
             gpio_reset_pin(gpio_num_t(pin));
             pinMode(pin, OPEN_DRAIN);
         }
@@ -509,11 +535,20 @@ public:
             gpio_reset_pin(gpio_num_t(SENSOR_INT));
             pinMode(SENSOR_INT, OPEN_DRAIN);
         }
+        if (rtcAlarm) {
+            // The PCF85063 INT is open-drain: hold the line high in sleep with the RTC pull-up (U2).
+            ext1 |= 1ULL << RTC_INT;
+            rtc_gpio_init(gpio_num_t(RTC_INT));
+            rtc_gpio_set_direction(gpio_num_t(RTC_INT), RTC_GPIO_MODE_INPUT_ONLY);
+            rtc_gpio_pulldown_dis(gpio_num_t(RTC_INT));
+            rtc_gpio_pullup_en(gpio_num_t(RTC_INT));
+            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);   // keep the pull-up powered
+        }
         if (ext1) {
             esp_sleep_enable_ext1_wakeup(ext1, ESP_EXT1_WAKEUP_ANY_LOW);
         }
-        if ((wakeMask & kWakeTimer) && timerSec > 0) {
-            esp_sleep_enable_timer_wakeup(uint64_t(timerSec) * 1000000ULL);
+        if ((wakeMask & kWakeTimer) && timerSec > 0 && !rtcAlarm) {
+            esp_sleep_enable_timer_wakeup(uint64_t(timerSec) * 1000000ULL);   // no RTC: RC timer (less accurate)
         }
         esp_deep_sleep_start();
         return false;   // not reached
@@ -525,12 +560,15 @@ public:
     {
         uint8_t n = 0;
         I2cLock lock;
+        const uint32_t clk = Wire.getClock();
+        Wire.setClock(100000);   // the bus runs at 1 MHz for the BHI260AP; most chips ACK reliably at 100 kHz
         for (uint8_t a = 1; a < 127 && n < max; a++) {
             Wire.beginTransmission(a);
             if (Wire.endTransmission() == 0) {
                 out[n++] = a;
             }
         }
+        Wire.setClock(clk);
         return n;
     }
 
@@ -545,6 +583,9 @@ private:
             }
             if (st & (1ULL << SENSOR_INT)) {
                 return WakeCause::Imu;
+            }
+            if (st & (1ULL << RTC_INT)) {
+                return WakeCause::Timer;   // S8: PCF85063 alarm
             }
             return WakeCause::Other;
         }

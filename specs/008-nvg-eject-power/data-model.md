@@ -149,6 +149,7 @@ void addPreSleepHook(PreSleepHook);    // ≤4 hooks; S8's chrono registers one
 ```
 
 `eject()` calls each hook and takes the smallest non-zero value → `deepSleep(mask, timerSec)`.
+*S8: a hook may return `kPostponeSleep` (`UINT32_MAX`) to cancel the eject; see `specs/009-drop-tank-chrono`.*
 
 ## 9. Power profile sample (log only, not stored)
 

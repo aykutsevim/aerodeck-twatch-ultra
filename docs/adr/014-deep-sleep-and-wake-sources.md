@@ -72,6 +72,17 @@ and RTC memory does not survive a power loss.
 - **Decision:** button-only wake, which is the SRS OI-1 fallback. `Cap::ImuWakeInterrupt` stays unset. The spike
   code remains behind the flag for a later attempt. S8's timer wake does not depend on it.
 
+## S8 addendum (2026-11-16): timer wake = RTC alarm
+
+- The ESP32-S3 deep-sleep timer runs on the RC slow clock, which drifts by percents (minutes over a 2-hour timer).
+- For a timer wake, `deepSleep(kWakeTimer, s)` instead sets the **PCF85063 alarm** at RTC-now + s
+  (day/hour/minute/second match), enables its interrupt, and adds `RTC_INT` (GPIO1, an RTC GPIO, open-drain; the
+  RTC pull-up is enabled in sleep) to the ext1 `ANY_LOW` mask. `wakeCause()` maps it to `Timer`. At boot the alarm
+  is disabled and its flag cleared.
+- **Measured:** 60 s and 300 s alarms woke the watch after 59.7 s and 299.8 s (1 s RTC resolution), with no early
+  wakes.
+- The ESP timer is only the fallback without an RTC chip.
+
 ## Consequences
 
 - Eject is fast: 3–14 ms from the request to the sleep call (console); **103 ms** from the end of the gesture.

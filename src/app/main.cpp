@@ -7,12 +7,14 @@
 #include <lvgl.h>
 #include "board/IBoard.h"
 #include "core/BootGuard.h"
+#include "pages/ChronoPage.h"
 #include "pages/PfdPage.h"
 #include "pages/RecorderPage.h"
 #include "pages/SettingsPage.h"
 #include "pages/WxPage.h"
 #include "services/AttitudeService.h"
 #include "services/AudioService.h"
+#include "services/ChronoService.h"
 #include "services/BoardCommands.h"
 #include "services/NetService.h"
 #include "services/AlertManager.h"
@@ -46,6 +48,7 @@ static QueueHandle_t g_uiQueue;
 static PfdPage g_home;
 static WxPage g_wx;   // S3: replaces the "PAGE A" placeholder
 static RecorderPage g_recorder;   // S6: replaces the "PAGE B" placeholder
+static ChronoPage g_chrono;       // S8: drop-tank chronograph
 static SettingsPage g_settings;
 
 static bool abnormalReset()
@@ -245,6 +248,8 @@ void setup()
     SvcTask::addTick(TimeService::tick);
     RecorderService::begin();            // S6: loads the saved days; motion starts in onImuReady
     SvcTask::addTick(RecorderService::tick);
+    ChronoService::begin();              // S8: after Time/Power/Alert/Audio; restores a running timer (late alerts)
+    SvcTask::addTick(ChronoService::tick);
     SvcTask::addTick(AttitudeService::tick);
     WeatherService::begin();             // S3: before NetService (TLS allocator before Wi-Fi is first used)
     SvcTask::addTick(WeatherService::tick);
@@ -256,6 +261,7 @@ void setup()
     PageManager::registerPage(&g_home);
     PageManager::registerPage(&g_wx);
     PageManager::registerPage(&g_recorder);
+    PageManager::registerPage(&g_chrono);
     PageManager::registerPage(&g_settings);
     PageManager::onFirstHome(onFirstHome);
 

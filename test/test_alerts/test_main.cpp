@@ -159,6 +159,29 @@ static void test_table()
     TEST_ASSERT_EQUAL_STRING("WARNING", levelName(AlertLevel::Warning));
 }
 
+// S8: chronograph alerts.
+static void test_chrono_alerts()
+{
+    const AlertDef* b = alertDef(AlertId::BingoFuel);
+    TEST_ASSERT_NOT_NULL(b);
+    TEST_ASSERT_EQUAL(42, int(AlertId::BingoFuel));
+    TEST_ASSERT_EQUAL(int(AlertLevel::Caution), int(b->level));
+    TEST_ASSERT_EQUAL(int(Pattern::Caution), int(b->pattern));
+    TEST_ASSERT_EQUAL(int(Clip::BingoFuel), int(b->voiceClip));
+    TEST_ASSERT_EQUAL_STRING("BINGO FUEL", b->text);
+    const AlertDef* o = alertDef(AlertId::BreakOver);
+    TEST_ASSERT_NOT_NULL(o);
+    TEST_ASSERT_EQUAL(43, int(AlertId::BreakOver));
+    TEST_ASSERT_EQUAL(int(AlertLevel::Caution), int(o->level));
+    TEST_ASSERT_EQUAL(int(Clip::Chime), int(o->voiceClip));
+    TEST_ASSERT_EQUAL_STRING("BREAK OVER", o->text);
+    AlertId id;
+    TEST_ASSERT_TRUE(alertIdFromName("bingofuel", id));
+    TEST_ASSERT_EQUAL(int(AlertId::BingoFuel), int(id));
+    TEST_ASSERT_TRUE(alertIdFromName("breakover", id));
+    TEST_ASSERT_EQUAL(int(AlertId::BreakOver), int(id));
+}
+
 static void test_names()
 {
     AlertId id;
@@ -234,6 +257,7 @@ int main()
     RUN_TEST(test_capacity);
     RUN_TEST(test_text_truncated);
     RUN_TEST(test_table);
+    RUN_TEST(test_chrono_alerts);
     RUN_TEST(test_names);
     RUN_TEST(test_callout_for);
     RUN_TEST(test_clip_names);
