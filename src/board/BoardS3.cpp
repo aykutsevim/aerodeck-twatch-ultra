@@ -179,6 +179,20 @@ public:
     }
     void setNvgFilter(bool on) override { g_nvgOn = on; }
     bool deepSleep(uint8_t, uint32_t) override { return false; }   // not validated on the S3 (contract)
+
+    // S9: no LoRa on the S3 in AeroDeck (S0 caps) → TCAS shows RADIO N/A.
+    bool radioStart(const RadioProfile&) override { return false; }
+    void radioStop() override {}
+    bool radioSend(const uint8_t*, size_t, uint32_t& airMs) override { airMs = 0; return false; }
+    bool radioPoll(RadioPacket&) override { return false; }
+    bool radioWait(uint32_t timeoutMs) override { delay(timeoutMs); return false; }
+    uint32_t radioAirtimeMs(size_t) override { return 0; }
+    uint32_t nodeId() const override
+    {
+        const uint64_t m = ESP.getEfuseMac();   // same mapping as BoardUltra: the MAC's last four bytes
+        return (uint32_t((m >> 16) & 0xFF) << 24) | (uint32_t((m >> 24) & 0xFF) << 16) |
+               (uint32_t((m >> 32) & 0xFF) << 8) | uint32_t((m >> 40) & 0xFF);
+    }
     core::WakeCause wakeCause() const override
     {
         switch (esp_sleep_get_wakeup_cause()) {

@@ -39,7 +39,7 @@ M5 Experimental ── S12 , S13
 | **S6** | G-force & flight recorder | M2 | S1 | Must | M | Daily NM + Max G on PFD and Recorder page; 7-day history survives reboot | ✅ Done (2026-11-12, PR #7) · manual: T015 SC-001 (3 walks ≥500 m, NM within ±15 %) |
 | **S7** | NVG, eject & power UX | M3 | S4, S6 | Must | M | NVG theme on all pages; Pull-to-Eject deep sleep + wake; screen timeout + raise-to-wake; **battery-life measurement report** | ✅ Done (2026-11-13, PR #8) · ≈34 mA avg / ≈33 h, NFR-PWR-002 met; horizon tilt added (FR-PFD-012); wrist-motion wake not possible (ADR-014) · manual: T020 raise false-wake walk, T042 fuel-gauge cross-check |
 | **S8** | Drop-tank chronograph | M3 | S4, S5, S7 | Must | S | Countdown/Pomodoro with depleting tank; Bingo Fuel alert fires even after sleep | ✅ Done (2026-11-16, PR #9) · alert ≤52 ms awake, −0.53…+0.29 s after eject (RTC-alarm wake) · no manual checks pending |
-| **S9** | TCAS LoRa radar | M4 | S4, S7 | Should | L | Two watches (or watch + node) see each other on the PPI; region/duty-cycle enforced | ⏳ Planned |
+| **S9** | TCAS LoRa radar | M4 | S4, S7 | Should | L | Two watches (or watch + node) see each other on the PPI; region/duty-cycle enforced | ✅ Done (2026-11-16, PR #10) · EU868 869.525 MHz on the 915 MHz unit (ADR-015) · 1-h duty soak max 35.9 s/36 s · TCAS on +6 mA · **pending manual: two-device checks SC-001/002/005, real RX decode** · one unreproduced display-SPI panic under watch |
 | **S10** | PTT: dB meter & acoustic commands | M4 | S4 | Should | M | Hold-to-talk dB gauge; whistle / double-clap trigger actions | ⏳ Planned |
 | **S11** | IFF countermeasures | M4 | S4 | Could | S | Guarded FIRE cover; Ultra: NFC NDEF action; S3: IR code send | ⏳ Planned |
 | **S12** | GNSS enhancements | M5 | S2, S9 | Could | M | GPS page; optional true course on heading tape; GNSS time fallback; TCAS true bearing | ⏳ Planned |
@@ -90,6 +90,7 @@ Sizes: S ≈ 2–4 dev-days, M ≈ 1 week, L ≈ 2 weeks (hobby pace, adjust as 
 | Horizon too slow at 410×502 | Med | High | Measure early in S1. Transform-based rendering, partial invalidation, canvas fallback. |
 | LilyGoLib/IDF 4.4 incompatibilities beyond the known patch | Med | Med | S0 automates patching. Arduino 3.x migration slice as plan B. |
 | Deep-sleep wake from IMU unsupported on Ultra wiring | Med | Low | Button + timer wake fallback (SRS OI-1). |
+| 915 MHz hardware in an 868 region: reduced range | High | Med | ADR-015: EU868 869.525 MHz at ≤14 dBm on the 915-tuned unit; range to be measured with a second device (pending). An 868 MHz unit needs no software change. |
 | LoRa duty-cycle limits make TCAS sluggish | Med | Low | 30–60 s beacons, RSSI smoothing. Beacons are tiny. |
 | Codec2 integration cost | High | Low | S13 gated by spike. Already marked experimental. |
 | Audio assets licensing | Low | Med | Use self-recorded or TTS clips only. |

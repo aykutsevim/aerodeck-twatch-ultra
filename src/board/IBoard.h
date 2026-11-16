@@ -1,6 +1,8 @@
 // AeroDeck board HAL. The only layer allowed to touch LilyGoLib/driver types (Principle II).
 // Contract: specs/001-platform-foundation/contracts/internal_interfaces.md
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include <ctime>
 #include "core/BootGuard.h"
 #include "core/Types.h"
@@ -16,6 +18,24 @@ struct MotionInfo {
     bool accel;          // accelerometer (incl. gravity) running
     float accelScale;    // LSB → g as applied
     float rangeG;        // measuring range in g (0 = unknown)
+};
+
+// S9: LoRa radio profile and received packet (contracts/board_radio.md).
+struct RadioProfile {
+    float freqMHz;
+    float bwKHz;
+    uint8_t sf;
+    uint8_t crDenom;
+    int8_t powerDbm;
+    uint8_t syncWord;
+    uint16_t preamble;
+};
+struct RadioPacket {
+    uint8_t data[64];
+    uint8_t len;
+    int16_t rssi;
+    int8_t snrQ4;     // SNR × 4 (dB)
+    bool crcError;
 };
 
 class IBoard {
@@ -76,6 +96,18 @@ public:
     virtual core::WakeCause wakeCause() const = 0;
     // Diagnostics (`ad probe s7 i2c`): addresses that ACK on the shared I2C bus. Default: not supported.
     virtual uint8_t i2cScan(uint8_t* out, uint8_t max) { (void)out; (void)max; return 0; }
+
+    // S9 LoRa radio (specs/010-tcas-lora-radar/contracts/board_radio.md). Called from the `radio` task (core 0),
+    // except radioAirtimeMs/nodeId. The rail must already be on (RailLease(Lora) held by the caller).
+    // radioStart: configure the SX1262, built-in antenna, DIO1 ISR, continuous RX. false = no radio / failed.
+    virtual bool radioStart(const RadioProfile& p) = 0;
+    virtual void radioStop() = 0;                                          // sleep the chip, detach the ISR
+    virtual bool radioSend(const uint8_t* buf, size_t n, uint32_t& airMs) = 0;   // blocking, then back to RX
+    virtual bool radioPoll(RadioPacket& out) = 0;                          // true = packet or CRC error since last
+    virtual bool radioWait(uint32_t timeoutMs) = 0;                        // DIO1 notification or timeout
+    virtual uint32_t radioAirtimeMs(size_t n) = 0;                         // for the current profile
+    virtual int radioLastError() const { return 0; }                       // RadioLib status of the last call
+    virtual uint32_t nodeId() const = 0;                                   // low 32 bits of the eFuse MAC
     virtual ~IBoard() = default;
 };
 

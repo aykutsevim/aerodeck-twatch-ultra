@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <lvgl.h>
 
-enum class PageId : uint8_t { Home, Weather, Recorder, Chrono, Settings, Count };   // S8 Chrono   // S3 Weather, S6 Recorder replace the placeholders
+enum class PageId : uint8_t { Home, Weather, Recorder, Chrono, Tcas, Settings, Count };   // S8 Chrono, S9 Tcas   // S3 Weather, S6 Recorder replace the placeholders
 
 class Page {
 public:

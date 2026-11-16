@@ -18,6 +18,7 @@ constexpr AlertDef kTable[] = {
     {AlertId::PullUp, AlertLevel::Warning, Pattern::StickShaker, 2000, uint8_t(Clip::PullUp), "PULL UP", "pullup"},
     {AlertId::BingoFuel, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::BingoFuel), "BINGO FUEL", "bingofuel"},
     {AlertId::BreakOver, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Chime), "BREAK OVER", "breakover"},
+    {AlertId::Traffic, AlertLevel::Advisory, Pattern::Advisory, 0, uint8_t(Clip::Traffic), "TRAFFIC", "traffic"},
     {AlertId::Test1, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 1", "test1"},
     {AlertId::Test2, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 2", "test2"},
     {AlertId::Test3, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 3", "test3"},
@@ -168,10 +169,17 @@ bool clipFromName(const char* name, Clip& out)
 
 Clip calloutFor(AlertId id, AlertLevel level)
 {
-    if (level != AlertLevel::Caution && level != AlertLevel::Warning) {
-        return Clip::None;   // Advisory (and None) never speak
-    }
     const AlertDef* d = alertDef(id);
+    if (level == AlertLevel::Advisory) {
+        // S9: an advisory speaks only when its own definition is an Advisory with an explicit clip (TRAFFIC).
+        if (d && d->level == AlertLevel::Advisory && d->voiceClip != 0 && d->voiceClip < uint8_t(Clip::Count)) {
+            return Clip(d->voiceClip);
+        }
+        return Clip::None;
+    }
+    if (level != AlertLevel::Caution && level != AlertLevel::Warning) {
+        return Clip::None;
+    }
     if (d && d->voiceClip != 0 && d->voiceClip < uint8_t(Clip::Count)) {
         return Clip(d->voiceClip);
     }

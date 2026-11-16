@@ -27,7 +27,7 @@ void configure(uint8_t timeoutIdx, bool raiseEnabled);
 void setApplied(bool nvg, uint8_t brightnessPct);   // for the snapshot
 void tick(uint32_t nowMs);                    // every UI loop iteration (works every 50 ms)
 bool onButton();                              // true = consumed (the press only woke the screen)
-void onAlert(core::AlertLevel lvl);           // new/re-armed Caution/Warning
+void onAlert(core::AlertLevel lvl, bool speaks = false);   // new/re-armed Caution/Warning, or a speaking advisory (S9)
 void command(uint8_t cmd);                    // 0 off, 1 on, 2 raise (console test hook, via ScreenCommand)
 void forceOff();                              // eject quiesce: display off now, no policy
 bool isOn();

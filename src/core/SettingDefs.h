@@ -15,6 +15,7 @@ enum class SettingKey : uint8_t {
     Stride,                                     // S6
     Nvg, ScrTo, Raise, AttRef,                  // S7
     ChrLen, ChrMode, ChrWork, ChrBrk,           // S8
+    Tcas, Callsign, TcasInt, TcasAge, LoraReg, LoraPwr, LoraSf, LoraBw,   // S9
     Count
 };
 
@@ -30,7 +31,7 @@ struct SettingDef {
     const char* sdef = nullptr;   // string default (Str type); nullptr = empty
 };
 
-constexpr uint16_t kSchemaVersion = 9;   // v3 (S2): wifi*, tzid, syncmin, lastsync; tzoff removed. v4 (S3): wxstn. v5 (S4): hapticlvl, quiet. v6 (S5): volume, chime, qhstart, qhend. v7 (S6): stride. v8 (S7): nvg, scrto, raise, attref. v9 (S8): chrlen, chrmode, chrwork, chrbrk
+constexpr uint16_t kSchemaVersion = 10;   // v3 (S2): wifi*, tzid, syncmin, lastsync; tzoff removed. v4 (S3): wxstn. v5 (S4): hapticlvl, quiet. v6 (S5): volume, chime, qhstart, qhend. v7 (S6): stride. v8 (S7): nvg, scrto, raise, attref. v9 (S8): chrlen, chrmode, chrwork, chrbrk. v10 (S9): tcas, callsign, tcasint, tcasage, lorareg, lorapwr, lorasf, lorabw
 constexpr const char* kLegacyTzoffKey = "tzoff";   // S1 key, migrated to tzid
 constexpr const char* kSchemaKey = "schema";
 constexpr const char* kNamespace = "aerodeck";
@@ -44,9 +45,9 @@ int32_t sanitizeSetting(SettingKey k, int32_t stored, bool present);
 SchemaAction schemaAction(uint16_t stored, uint16_t current, bool present);
 int findSettingKey(const char* name);   // SettingKey index or -1
 // String settings: length within [min, max] of the def (ssid 1..32, psk 8..63).
-// wxstn: exactly 4 letters A-Z, case-insensitive.
+// wxstn: exactly 4 letters A-Z, case-insensitive. callsign: 1..8 of [A-Za-z0-9-].
 bool validateString(SettingKey k, const char* v);
-// Canonical form before storing (wxstn → uppercase); other keys unchanged.
+// Canonical form before storing (wxstn, callsign → uppercase); other keys unchanged.
 void normalizeString(SettingKey k, char* v);
 // Migration 2→3: the S1 fixed UTC offset (minutes) → index of an equivalent zone (Zones::bestMatch).
 uint16_t migrateTzoffToTzid(int32_t tzoffMin);

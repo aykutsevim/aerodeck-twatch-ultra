@@ -184,14 +184,14 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 3.9 TCAS / tactical radar (TCS)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| FR-TCS-001 | M | The system shall send an AeroDeck beacon packet (protocol version, callsign, sequence, battery %, optional GNSS position) at a configurable interval (default 30 s) while TCAS is enabled. |
+| FR-TCS-001 | M | The system shall send an AeroDeck beacon packet (protocol version, callsign, sequence, battery %, optional GNSS position) at a configurable interval (default 30 s) while TCAS is enabled. *(S9: interval 15 s–5 min with ±10 % jitter; 18-byte beacon without position (SAS §7.2); the radio rail is on only while TCAS is on; TCAS is off by default.)* |
 | FR-TCS-002 | M | The system shall receive beacons in the background and keep a target table (ID, callsign, last RSSI, last SNR, last seen, optional position). Targets age out after a configurable time (default 5 min). |
 | FR-TCS-003 | M | The TCAS page shall show a sweeping PPI radar. Each target is drawn as a "bogey" at a range ring derived from RSSI (stronger = closer). Without GNSS positions, bearing is cosmetic and stable per target. |
 | FR-TCS-004 | M | Tapping a target shall show its callsign, RSSI, SNR, age and battery. |
 | FR-TCS-005 | S | When both ends have GNSS, targets shall be plotted at true bearing and distance. |
-| FR-TCS-006 | S | A new target entering the inner ring shall raise a "TRAFFIC" ADVISORY. |
+| FR-TCS-006 | S | A new target entering the inner ring shall raise a "TRAFFIC" ADVISORY. *(S9: once per entry into the inner ring; TRAFFIC is the one advisory that speaks ("Traffic" clip) and may wake the screen; quiet rules apply.)* |
 | FR-TCS-007 | C | The system may passively decode Meshtastic node-info/position packets on the same channel preset and show them as targets (read-only). |
-| FR-TCS-008 | M | The LoRa region, frequency, TX power, spreading factor and bandwidth shall be configurable and limited to the legal values for the selected region. |
+| FR-TCS-008 | M | The LoRa region, frequency, TX power, spreading factor and bandwidth shall be configurable and limited to the legal values for the selected region. *(S9: the frequency is the region's fixed channel, shown not edited. EU868: 869.525 MHz (sub-band g3), 2–14 dBm (default 10), SF7–12, BW 125/250 kHz. US915: 902.3–914.9 MHz, ≤ 20 dBm, 400 ms dwell, only where legal (ADR-015).)* |
 
 ### 3.10 Push-to-talk / microphone (PTT)
 | ID | Pri | Requirement |
@@ -270,7 +270,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 4.7 Regulatory (REG)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| NFR-REG-001 | M | LoRa transmissions shall respect the regional duty-cycle and power limits (EU868: ≤1 % duty cycle on the default sub-band). The firmware shall enforce the duty-cycle budget. |
+| NFR-REG-001 | M | LoRa transmissions shall respect the regional duty-cycle and power limits (EU868: ≤1 % duty cycle on the default sub-band). The firmware shall enforce the duty-cycle budget. *(S9: 1 % per rolling hour (36 s) enforced before every transmit, stricter than g3's 10 %; the history survives eject and soft reset (RTC memory). Measured: a 1-hour soak never exceeded 36 s.)* |
 
 ---
 
@@ -312,4 +312,4 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 | OI-3 | On-device keyword spotting memory/CPU budget. | S10 starts with FFT acoustic gestures. Keyword spotting is a stretch goal. |
 | OI-4 | Codec2 on Arduino-ESP32 2.x build integration. | S13 is experimental and gated by a spike. |
 | OI-5 | Migrate to Arduino-ESP32 3.x (IDF 5) to drop the LilyGoLib patch? | Re-evaluate after S5. A migration would be its own slice. |
-| OI-6 | SX1262 band variant of the physical unit (868 vs 915 MHz hardware). | Confirm from the unit label before S9. Default region EU868. |
+| OI-6 | SX1262 band variant of the physical unit (868 vs 915 MHz hardware). | **Closed in S9 (ADR-015):** the unit is the 915 MHz variant. In Türkiye it operates in the legal EU868 band (869.525 MHz, ≤ 14 dBm) on the 915-tuned hardware, with reduced range. US915 is selectable only where legal. |

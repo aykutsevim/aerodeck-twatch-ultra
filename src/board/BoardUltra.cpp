@@ -572,6 +572,159 @@ public:
         return n;
     }
 
+    // ---- S9 LoRa radio (contracts/board_radio.md, research R2) ----
+    // LilyGoLib owns the SX1262 (`radio`) and the RF switch on the XL9555. Every radio call takes LilyGoLib's SPI
+    // lock (the bus is shared with the SD card and NFC); the RF switch takes the I2C lock. The DIO1 ISR only
+    // gives a semaphore: no SPI in the ISR.
+    bool radioStart(const RadioProfile& p) override
+    {
+        if (!s_radioSemIsr) {
+            s_radioSemIsr = xSemaphoreCreateBinary();
+        }
+        int16_t st;
+        {
+            SpiLock spi;
+            // The chip lost its configuration when the rail was off: begin() every time.
+            st = radio.begin(p.freqMHz, p.bwKHz, p.sf, p.crDenom, p.syncWord, p.powerDbm, p.preamble);
+            if (st == RADIOLIB_ERR_NONE) {
+                st = radio.setCurrentLimit(140.0f);
+            }
+            if (st == RADIOLIB_ERR_NONE) {
+                s_dio1 = false;
+                radio.setDio1Action(onDio1);
+                st = radio.startReceive();
+            }
+        }
+        lastErr_ = st;
+        if (st != RADIOLIB_ERR_NONE) {
+            log_e("[radio] start failed %d", st);
+            return false;
+        }
+        {
+            I2cLock lock;
+            instance.setRFSwitch(false);   // built-in antenna
+        }
+        radioOn_ = true;
+        return true;
+    }
+
+    void radioStop() override
+    {
+        if (!radioOn_) {
+            return;
+        }
+        SpiLock spi;
+        radio.clearDio1Action();
+        lastErr_ = radio.sleep();
+        radioOn_ = false;
+        s_dio1 = false;
+    }
+
+    bool radioSend(const uint8_t* buf, size_t n, uint32_t& airMs) override
+    {
+        airMs = 0;
+        if (!radioOn_) {
+            return false;
+        }
+        // Not radio.transmit(): it busy-polls DIO1 for the whole airtime (1.3 s at SF12) while holding the SPI lock,
+        // starving the lower-priority svc task on core 0 (IMU sampling). Start the transmit, release SPI and block
+        // on the DIO1 semaphore instead.
+        uint32_t t0;
+        uint32_t toaMs;
+        int16_t st;
+        {
+            SpiLock spi;
+            toaMs = uint32_t(radio.getTimeOnAir(n) / 1000);
+            xSemaphoreTake(s_radioSemIsr, 0);   // drop a stale RX interrupt; RX is abandoned for the transmit
+            s_dio1 = false;
+            t0 = millis();
+            st = radio.startTransmit(buf, n);
+        }
+        if (st == RADIOLIB_ERR_NONE) {
+            const bool done = xSemaphoreTake(s_radioSemIsr, pdMS_TO_TICKS(toaMs + toaMs / 2 + 200)) == pdTRUE;
+            airMs = millis() - t0;
+            SpiLock spi;
+            const int16_t fin = radio.finishTransmit();   // clears the IRQ flags, standby
+            st = done ? fin : int16_t(RADIOLIB_ERR_TX_TIMEOUT);
+        }
+        lastErr_ = st;
+        {
+            SpiLock spi;
+            s_dio1 = false;   // the TX-done interrupt is not a received packet
+            radio.startReceive();
+        }
+        return st == RADIOLIB_ERR_NONE;
+    }
+
+    bool radioPoll(RadioPacket& out) override
+    {
+        if (!radioOn_ || !s_dio1) {
+            return false;
+        }
+        s_dio1 = false;
+        SpiLock spi;
+        size_t len = radio.getPacketLength();
+        if (len > sizeof(out.data)) {
+            len = sizeof(out.data);
+        }
+        const int16_t st = radio.readData(out.data, len);
+        out.len = uint8_t(len);
+        out.rssi = int16_t(lroundf(radio.getRSSI()));
+        out.snrQ4 = int8_t(lroundf(radio.getSNR() * 4.0f));
+        out.crcError = st == RADIOLIB_ERR_CRC_MISMATCH;
+        lastErr_ = st;
+        radio.startReceive();
+        return st == RADIOLIB_ERR_NONE || out.crcError;
+    }
+
+    bool radioWait(uint32_t timeoutMs) override
+    {
+        if (!s_radioSemIsr) {
+            delay(timeoutMs);
+            return false;
+        }
+        return xSemaphoreTake(s_radioSemIsr, pdMS_TO_TICKS(timeoutMs)) == pdTRUE;
+    }
+
+    uint32_t radioAirtimeMs(size_t n) override
+    {
+        if (!radioOn_) {
+            return 0;
+        }
+        return uint32_t((radio.getTimeOnAir(n) + 500) / 1000);   // RadioLib returns µs
+    }
+
+    int radioLastError() const override { return lastErr_; }
+
+    uint32_t nodeId() const override
+    {
+        // The last four bytes of the factory MAC (NIC-specific part), so `AD-xxxx` shows the MAC's last two bytes.
+        const uint64_t m = ESP.getEfuseMac();   // byte 0 of the MAC is the lowest byte
+        return (uint32_t((m >> 16) & 0xFF) << 24) | (uint32_t((m >> 24) & 0xFF) << 16) |
+               (uint32_t((m >> 32) & 0xFF) << 8) | uint32_t((m >> 40) & 0xFF);
+    }
+
+private:
+    struct SpiLock {
+        SpiLock() { instance.lockSPI(); }
+        ~SpiLock() { instance.unlockSPI(); }
+    };
+    static void IRAM_ATTR onDio1()
+    {
+        s_dio1 = true;
+        BaseType_t woken = pdFALSE;
+        if (s_radioSemIsr) {
+            xSemaphoreGiveFromISR(s_radioSemIsr, &woken);
+        }
+        if (woken) {
+            portYIELD_FROM_ISR();
+        }
+    }
+    static volatile bool s_dio1;
+    static SemaphoreHandle_t s_radioSemIsr;
+    bool radioOn_ = false;
+    int lastErr_ = 0;
+
 private:
     static WakeCause readWakeCause()
     {
@@ -803,6 +956,8 @@ volatile bool BoardUltra::g_nvgOn = false;
 volatile bool BoardUltra::g_flushBusy = false;
 QueueHandle_t BoardUltra::s_flushQ = nullptr;
 SemaphoreHandle_t BoardUltra::s_flushDone = nullptr;
+volatile bool BoardUltra::s_dio1 = false;
+SemaphoreHandle_t BoardUltra::s_radioSemIsr = nullptr;
 BoardUltra g_board;
 
 } // namespace

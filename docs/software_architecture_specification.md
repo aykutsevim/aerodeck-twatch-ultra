@@ -84,6 +84,13 @@ struct IBoard {
   virtual bool deepSleep(uint8_t wakeMask, uint32_t timerSec) = 0;   // own sequence (ADR-014); false = unsupported
   virtual WakeCause wakeCause() const = 0;                        // PowerOn / Button / Imu / Timer / Other
   // (the planned configureWake() is folded into deepSleep's wake mask)
+  // S9 (specs/010-tcas-lora-radar/contracts/board_radio.md): LoRa via LilyGoLib's RadioLib `radio` (SX1262);
+  // the caller holds RailLease(Lora); calls take LilyGoLib's SPI lock; the DIO1 ISR only gives a semaphore
+  virtual bool radioStart(const RadioProfile&) = 0;   // begin + built-in antenna + DIO1 ISR + continuous RX
+  virtual void radioStop() = 0;
+  virtual bool radioSend(const uint8_t*, size_t, uint32_t& airMs) = 0;   // blocking, then back to RX
+  virtual bool radioPoll(RadioPacket&) = 0;  virtual bool radioWait(uint32_t ms) = 0;
+  virtual uint32_t radioAirtimeMs(size_t n) = 0;  virtual uint32_t nodeId() const = 0;   // MAC's last 4 bytes
   // accessors for Radio/Audio/Mic/Nfc/Ir/Gnss handles, each nullable
 };
 IBoard& board();   // selected at compile time by ARDUINO_T_WATCH_S3_ULTRA / ARDUINO_T_WATCH_S3
@@ -101,7 +108,7 @@ IBoard& board();   // selected at compile time by ARDUINO_T_WATCH_S3_ULTRA / ARD
 | ~~`attitude`~~ | – | – | – | **Superseded by ADR-010:** the BHI260AP gravity virtual sensor (100 Hz, on-chip fusion) is delivered via LilyGoLib's event loop on the `ui` task; `AttitudeService` computes pitch/roll/LOCK and publishes `AttitudeSnapshot` |
 | `svc` | 0 | 2 | 50 ms tick + queue | Cooperative tick for Power, Time, Alert, Chrono, Recorder, Haptic |
 | `net` | 0 | 1 | on demand | Wi-Fi up → NTP → METAR → Wi-Fi down |
-| `radio` | 0 | 4 | DIO1 IRQ + timers | RadioLib RX/TX, beacons, duty-cycle accounting |
+| `radio` | 0 | 4 | DIO1 IRQ + 50 ms wait | S9: exists only while TCAS is on. `IBoard::radio*` RX polling and blocking transmits; queues to/from `TcasService` (svc), which schedules beacons and keeps the duty budget |
 | `audio` | 0 | 5 | while playing | WAV decode → I2S. Holds the AudioAmp rail lease |
 | `mic` | 0 | 4 | while PTT held | PDM capture → RMS/FFT (→ Codec2 in S13) |
 
@@ -152,6 +159,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `HapticService` | S4 | `core::HapticPolicy` (effect sequence per pattern × intensity × quiet; WARNING always full strength) + priority (a click never cuts a warning; never queued); plays via `IBoard::haptic(seq)`; `click()` safe from the UI task (~0.5 ms) | — |
 | `AudioService` | S5 | `audio` task (core 0, prio 5): `core::SoundQueue` (cap 6; Warning > Caution > Chime > Sample; dedupe; preempt; stale drop 5 s / chime 2 s), WAV from the FAT partition via `FFat` (platform service, ADR-013) parsed by `core::Wav`, q15 volume (`core::AudioMath`, Off + 4 steps), `RailLease(AudioAmp)` only while playing (30 ms settle, 20 ms zero guards, DMA flush + 150 ms tail → amp off ≈0.4 s after the last clip), output via `IBoard::audio*`; gates and hourly chime from `core::AudioPolicy` (quiet mode, volume Off, quiet hours; one chime per local hour); AlertManager queues callouts on raise/re-arm, every 3rd shaker cycle (~6 s) for an unacked WARNING, and stops them on acknowledge | — |
 | `RecorderService` | S6 | svc tick at 1 Hz: polls `IBoard::stepCount` (BHI260AP step counter) through `core::StepAccumulator` (hub restarts, implausible jumps) and `takePeakG` (corrected accelerometer, 50 Hz, ±16 g; peaks in the first 2 s after start-up discarded) into `core::DayLog` (today + 7 days, local-midnight rollover; no rollover while the clock is unset or when the date moves back; skipped days empty); motion configured in `onImuReady()` from the deferred probe; NM = steps × stride / 1852 (`core::FlightMath`); persisted in NVS `rec` (`core::RecBlob`, 100 B, CRC) every 10 min when changed, at rollover and on `esp_restart` (shutdown handler); `saveNow()` for S7; `ad rec …` | `RecorderSnapshot` |
+| `TcasService` | S9 | `RailLease(Lora)` + the `radio` task only while the `tcas` setting is on (after the deferred probe, never during eject); beacons every interval ±10 % (`core::BeaconCodec`, SAS §7.2) gated by the region (`core::LoraRegion`) and the 1 %/h budget (`core::DutyCycle`, airtime from `core::LoraAirtime`, history in RTC memory); RX → `core::TcasTable` (16 contacts, EMA rings, hashed bearing, age-out); TRAFFIC advisory per inner-ring entry; pre-sleep hook stops the radio; `ad tcas …`, `ad probe s9 tx\|rx` | `TcasSnapshot` |
 | `ChronoService` | S8 | Countdown + Pomodoro on absolute UTC end times (`core::ChronoModel`), NVS `chrono` (on changes only), BINGO FUEL / BREAK OVER alerts, eject pre-sleep hook (wake 5 s early, postpone in the last 6 s), `ad chrono` | `ChronoSnapshot` |
 | `RadioService` | S9 | SX1262 config per region, RX IRQ, TX queue, duty-cycle budget (`duty_cycle`) | — |
 | `TcasService` | S9 | Beacon schedule, target table, ageing, RSSI→range | `TcasSnapshot`, `TargetNew` |
@@ -166,6 +174,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
 | `SettingsStore` | NVS namespace `aerodeck` | Schema version (v8 in S7: `nvg` default 0, `scrto` 0..5 index of 10 s/15 s/30 s/1 min/5 min/Never default 1, `raise` default 1, `attref` horizon tilt 0..90° step 15 default 30; v7 in S6: `stride` 30..150 cm default 75; v6 in S5: `volume` 0..4 default 3, `chime` default 1, `qhstart` 0..23 default 22, `qhend` 0..23 default 7; v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| TCAS | Settings v10 (S9): `tcas` 0/1 default 0, `callsign` 1..8 `[A-Z0-9-]` (empty → `AD-xxxx`), `tcasint` 15..300 s default 30, `tcasage` 60..1800 s default 300, `lorareg` 0 EU868 / 1 US915, `lorapwr` 2..20 dBm default 10 (clamped by the region), `lorasf` 7..12 default 9, `lorabw` index default 0; the duty history in `RTC_NOINIT` memory (`core::DutyCycle` blob, magic + CRC) | Radio settings, airtime of the last hour |
 | Chronograph | Own NVS namespace `chrono`, blob `st` (38 B, versioned + CRC), written on state changes only; settings v9 `chrlen`/`chrmode`/`chrwork`/`chrbrk` (S8) | Timer state |
 | Recorder | Own NVS namespace `rec` (so Restore defaults keeps it), blob `day` (100 B, versioned + CRC): every 10 min when changed (stricter than the planned hourly), at each rollover, on `esp_restart` and at eject (S7; no `RTC_DATA_ATTR` mirror: NVS suffices, ADR-014) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
@@ -180,15 +189,15 @@ The partition table is project-owned (`partitions/aerodeck_16MB.csv`, ADR-009): 
 | 2 | 1 | Type (`0x01` beacon, `0x02` voice-fragment, `0x03` ack) |
 | 3 | 4 | Node ID (from eFuse MAC, truncated) |
 | 7 | 1 | Seq |
-| 8 | 8 | Callsign (ASCII, zero-padded) |
+| 8 | 8 | Callsign (ASCII, zero-padded; `[A-Z0-9-]`, a space-padded sender is tolerated) |
 | 16 | 1 | Battery % |
 | 17 | 1 | Flags (bit0 has-position) |
 | 18 | 6 | Optional lat/lon (int24 each, `deg × 2²³/180`, ≈2.4 m resolution) |
 
-Default radio profile: EU868 869.525 MHz, SF9, BW125, CR4/5, 14 dBm. US915 profile selectable. `duty_cycle` enforces the budget before every TX.
+S9 sends the 18-byte form (no position, flags 0). Default radio profile: EU868 869.525 MHz (fixed channel), SF9, BW125, CR4/5, **10 dBm** (≤ 14 dBm), private sync word 0x12; ≈185 ms on air. US915 profile selectable where legal (ADR-015). `core::DutyCycle` enforces the 1 %/h budget before every TX.
 
 ### 7.3 RSSI → range ring
-`ring = clamp((rssi_ref − rssi) / step, 0, N−1)` with `rssi_ref = −40 dBm`, `step = 15 dB`, `N = 4`. Smooth with an EMA (α=0.3). The bearing is a stable hash of the node ID unless a GNSS position exists.
+`ring = clamp((rssi_ref − rssi) / step, 0, N−1)` with `rssi_ref = −40 dBm`, `step = 15 dB`, `N = 4`. Smooth with an EMA (α=0.3). The bearing is a stable hash of the node ID unless a GNSS position exists. (S9: `core::TcasTable`; ring 0 is the inner ring; a TRAFFIC advisory is raised once per entry into it. On the 915 MHz unit RSSI reads lower, so contacts sit farther out, ADR-015.)
 
 ## 8. UI architecture
 - **Resolution independence:** `Theme::scale = min(w,h)/240.0`. All sizes go through `S(px)`. Layout uses LVGL flex/grid and `lv_pct`. The Ultra is **portrait, 410×502** (LilyGoLib rotation 0): the PFD stacks heading tape, hour tape | ADI | minute tape, EICAS and a ZULU/LOCAL row (`core::PfdLayout`). Landscape and square screens use a side-by-side arrangement. Board code must report the *rotated* size (`instance.width()/height()`), not the variant's pre-rotation `DISP_WIDTH/DISP_HEIGHT`, plus the screen's corner radius (`DisplayInfo.cornerR`, Ultra 64 px). Layouts keep content inside the rounded corners (`core::insideRounded`), and overlays avoid corner anchoring.
@@ -204,6 +213,9 @@ Default radio profile: EU868 869.525 MHz, SF9, BW125, CR4/5, 14 dBm. US915 profi
 - **Asynchronous flush (S7):** the recolour/swap and the blocking QSPI `pushColors` run on a core-0 task. LVGL
   renders the next area into its second buffer meanwhile; `flush_wait_cb` blocks on a semaphore.
 - Measured: PFD 35 fps in day mode and NVG (was 30).
+- **TCAS page (S9):** page ring PFD → WX → RECORDER → CHRONO → **TCAS** → Settings. A custom-drawn PPI (4 rings,
+  ownship, a sweep with a fading trail redrawn at 20 Hz by an `lv_timer` that exists only while the page is
+  visible), bogeys as clickable objects (≥ 48 px hit area) placed from `TcasSnapshot` at 2 Hz, and a detail card.
 
 ## 9. Build & configuration
 - Environments: `twatch_ultra` (primary), `twatchs3` (secondary, must compile), `native` (Unity tests of `src/core/` only: `build_src_filter = +<core/>`, `test_build_src = yes`; needs a host GCC, MinGW-w64 on Windows).
@@ -250,6 +262,7 @@ Each slice's spec-kit `tasks.md` shall include its acceptance scenarios as on-de
 | ADR-011 | Custom-drawn horizon, ≈238 px cap, 1° heading steps (`docs/adr/011-…`). | Pipeline ceiling ~34 FPS at 280 px; median 30 FPS achieved. |
 | ADR-012 | The SoC Wi-Fi/IP stack is a platform service: allowed only in `src/services/`; power via `PowerService` `Rail::Wifi` (`docs/adr/012-…`). | Identical on every board; an `IBoard` wrapper would have one implementation. |
 | ADR-014 | Deep sleep with an own sequence instead of LilyGoLib's `sleep()` (2 s delay, timer XOR pins, sensor rail cut freezes the hub after wake); button-only wake; OI-1 closed (`docs/adr/014-…`). | Eject in ~0.1 s; timer wake possible for S8; hub healthy after wake. |
+| ADR-015 | LoRa in EU868 (869.525 MHz, ≤ 14 dBm, default 10) on the 915 MHz unit; 1 % self-imposed duty budget enforced in software, history in RTC memory; US915 only where legal; OI-6 closed (`docs/adr/015-…`). | Legal in Türkiye on this hardware; reduced range is accepted and documented. |
 | ADR-013 | Audio assets flashed with `uploadfs` (USB mass storage is compiled out in HW-CDC mode); `FFat` read only in `AudioService` as a platform service; speaker via `IBoard::audio*` over LilyGoLib's `Player` (`docs/adr/013-…`). Amends ADR-009. | Reproducible from a clean checkout; keeps the serial console; one I2S owner. |
 
 New ADRs are appended in `docs/adr/NNN-title.md` by the slice that makes the decision.

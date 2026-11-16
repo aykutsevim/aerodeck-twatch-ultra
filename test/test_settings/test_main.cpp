@@ -298,7 +298,7 @@ static void test_schema_v8_display()
 // S8 schema v9: chronograph lengths and mode (additive).
 static void test_schema_v9_chrono()
 {
-    TEST_ASSERT_EQUAL(9, kSchemaVersion);
+    TEST_ASSERT_TRUE(kSchemaVersion >= 9);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(8, 9, true)));
     struct {
         SettingKey k;
@@ -326,6 +326,57 @@ static void test_schema_v9_chrono()
     }
     TEST_ASSERT_TRUE(validateSetting(SettingKey::ChrBrk, 10));
     TEST_ASSERT_FALSE(validateSetting(SettingKey::ChrBrk, 7));
+}
+
+// S9 schema v10: TCAS and LoRa radio settings (data-model §1, FR-002, FR-004, FR-005).
+static void test_schema_v10_tcas()
+{
+    TEST_ASSERT_EQUAL(10, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(9, 10, true)));
+    struct {
+        SettingKey k;
+        const char* name;
+        SettingType t;
+        int32_t def, min, max;
+        bool editable;
+    } rows[] = {
+        {SettingKey::Tcas, "tcas", SettingType::Bool, 0, 0, 1, true},
+        {SettingKey::TcasInt, "tcasint", SettingType::U16, 30, 15, 300, true},
+        {SettingKey::TcasAge, "tcasage", SettingType::U16, 300, 60, 1800, true},
+        {SettingKey::LoraReg, "lorareg", SettingType::U8, 0, 0, 1, true},   // console only (not on the page)
+        {SettingKey::LoraPwr, "lorapwr", SettingType::U8, 10, 2, 20, true},
+        {SettingKey::LoraSf, "lorasf", SettingType::U8, 9, 7, 12, true},
+        {SettingKey::LoraBw, "lorabw", SettingType::U8, 0, 0, 2, true},
+    };
+    for (auto& r : rows) {
+        const SettingDef& d = settingDef(r.k);
+        TEST_ASSERT_EQUAL_STRING(r.name, d.key);
+        TEST_ASSERT_EQUAL(int(r.t), int(d.type));
+        TEST_ASSERT_EQUAL(r.def, d.def);
+        TEST_ASSERT_EQUAL(r.min, d.min);
+        TEST_ASSERT_EQUAL(r.max, d.max);
+        TEST_ASSERT_EQUAL(r.editable, d.editable);
+        TEST_ASSERT_EQUAL(int(r.k), findSettingKey(r.name));
+        TEST_ASSERT_EQUAL(r.def, sanitizeSetting(r.k, 0, false));   // migration v9→v10: missing → default
+        TEST_ASSERT_FALSE(validateSetting(r.k, r.max + 1));
+        TEST_ASSERT_FALSE(validateSetting(r.k, r.min - 1));
+    }
+    const SettingDef& c = settingDef(SettingKey::Callsign);
+    TEST_ASSERT_EQUAL_STRING("callsign", c.key);
+    TEST_ASSERT_EQUAL(int(SettingType::Str), int(c.type));
+    TEST_ASSERT_EQUAL(1, c.min);
+    TEST_ASSERT_EQUAL(8, c.max);
+    TEST_ASSERT_FALSE(c.secret);
+    TEST_ASSERT_TRUE(validateString(SettingKey::Callsign, "AD-1A2B"));
+    TEST_ASSERT_TRUE(validateString(SettingKey::Callsign, "maverick"));   // case-insensitive
+    TEST_ASSERT_TRUE(validateString(SettingKey::Callsign, "X"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::Callsign, ""));
+    TEST_ASSERT_FALSE(validateString(SettingKey::Callsign, "TOOLONG99"));   // 9 chars
+    TEST_ASSERT_FALSE(validateString(SettingKey::Callsign, "AB CD"));
+    TEST_ASSERT_FALSE(validateString(SettingKey::Callsign, "AB_CD"));
+    char v[9] = "goose-1";
+    normalizeString(SettingKey::Callsign, v);
+    TEST_ASSERT_EQUAL_STRING("GOOSE-1", v);
 }
 
 static void test_s0_settings_have_no_step()
@@ -363,6 +414,7 @@ int main()
     RUN_TEST(test_schema_v7_stride);
     RUN_TEST(test_schema_v8_display);
     RUN_TEST(test_schema_v9_chrono);
+    RUN_TEST(test_schema_v10_tcas);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

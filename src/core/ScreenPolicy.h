@@ -22,7 +22,8 @@ public:
 
     bool onButton(uint32_t nowMs);                // true = consumed (it only woke the screen)
     bool onRaise(uint32_t nowMs);                 // true = will turn on
-    bool onAlert(AlertLevel lvl, uint32_t nowMs); // Caution/Warning; true = will turn on
+    // Caution/Warning wake; an Advisory wakes only when it speaks (S9 TRAFFIC). true = will turn on.
+    bool onAlert(AlertLevel lvl, uint32_t nowMs, bool speaks = false);
     void command(bool on, uint32_t nowMs);        // console test hook
 
     // inactiveMs: time since the last touch input; touchDown: a finger is on the glass now.

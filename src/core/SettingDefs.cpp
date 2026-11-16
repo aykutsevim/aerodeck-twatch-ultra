@@ -39,6 +39,15 @@ static const SettingDef kDefs[] = {
     {"chrmode", SettingType::Bool, 0, 0, 1, 0, false, true},   // 0 countdown, 1 Pomodoro
     {"chrwork", SettingType::U8, 25, 1, 120, 0, false, true},  // Pomodoro work minutes
     {"chrbrk", SettingType::U8, 5, 5, 15, 5, false, true},     // Pomodoro break minutes (5/10/15)
+    // S9 (schema 10)
+    {"tcas", SettingType::Bool, 0, 0, 1, 0, false, true},         // TCAS on/off (radio rail only while on)
+    {"callsign", SettingType::Str, 0, 1, 8, 0, false, true},      // empty -> AD-xxxx from the node id
+    {"tcasint", SettingType::U16, 30, 15, 300, 0, false, true},   // beacon interval (s), +-10 % jitter
+    {"tcasage", SettingType::U16, 300, 60, 1800, 0, false, true}, // contact age-out (s)
+    {"lorareg", SettingType::U8, 0, 0, 1, 0, false, true},        // 0 EU868, 1 US915 (console only, not on the page)
+    {"lorapwr", SettingType::U8, 10, 2, 20, 0, false, true},      // TX power dBm (clamped by the region)
+    {"lorasf", SettingType::U8, 9, 7, 12, 0, false, true},        // spreading factor
+    {"lorabw", SettingType::U8, 0, 0, 2, 0, false, true},         // bandwidth index into the region list
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 
@@ -116,6 +125,14 @@ bool validateString(SettingKey k, const char* v)
     if (n < size_t(d.min) || n > size_t(d.max)) {
         return false;
     }
+    if (k == SettingKey::Callsign) {
+        for (size_t i = 0; i < n; i++) {
+            const char c = v[i];
+            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) {
+                return false;
+            }
+        }
+    }
     if (k == SettingKey::WxStation) {
         for (size_t i = 0; i < n; i++) {
             const char c = v[i];
@@ -129,7 +146,7 @@ bool validateString(SettingKey k, const char* v)
 
 void normalizeString(SettingKey k, char* v)
 {
-    if (!v || k != SettingKey::WxStation) {
+    if (!v || (k != SettingKey::WxStation && k != SettingKey::Callsign)) {
         return;
     }
     for (; *v; v++) {

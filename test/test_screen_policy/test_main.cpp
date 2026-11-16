@@ -111,6 +111,20 @@ static void test_alerts()
     TEST_ASSERT_EQUAL(int(A::TurnOff), int(p.update(45000, 45000, false, false)));
 }
 
+// S9: a speaking advisory (TRAFFIC) may wake the screen; silent advisories still do not (research R6).
+static void test_speaking_advisory_wakes()
+{
+    ScreenPolicy p = make();
+    p.update(15000, 15000, false, false);
+    TEST_ASSERT_FALSE(p.on());
+    TEST_ASSERT_FALSE(p.onAlert(AlertLevel::Advisory, 16000, false));
+    TEST_ASSERT_EQUAL(int(A::None), int(p.update(16000, 16000, false, false)));
+    TEST_ASSERT_TRUE(p.onAlert(AlertLevel::Advisory, 17000, true));
+    TEST_ASSERT_EQUAL(int(A::TurnOn), int(p.update(17000, 17000, false, false)));
+    TEST_ASSERT_EQUAL(int(C::Alert), int(p.cause()));
+    TEST_ASSERT_FALSE(p.onAlert(AlertLevel::None, 18000, true));   // level None never wakes
+}
+
 static void test_timeout_change_applies_next_update()
 {
     ScreenPolicy p = make(5);
@@ -171,6 +185,7 @@ int main()
     RUN_TEST(test_button);
     RUN_TEST(test_raise_rules);
     RUN_TEST(test_alerts);
+    RUN_TEST(test_speaking_advisory_wakes);
     RUN_TEST(test_timeout_change_applies_next_update);
     RUN_TEST(test_touch_suppression_after_wake);
     RUN_TEST(test_command);

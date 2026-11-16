@@ -11,6 +11,7 @@
 #include "pages/PfdPage.h"
 #include "pages/RecorderPage.h"
 #include "pages/SettingsPage.h"
+#include "pages/TcasPage.h"
 #include "pages/WxPage.h"
 #include "services/AttitudeService.h"
 #include "services/AudioService.h"
@@ -26,6 +27,7 @@
 #include "services/SerialConsole.h"
 #include "services/SettingsStore.h"
 #include "services/SvcTask.h"
+#include "services/TcasService.h"
 #include "services/TimeService.h"
 #include "services/WeatherService.h"
 #include "ui/AnnunciatorBar.h"
@@ -49,6 +51,7 @@ static PfdPage g_home;
 static WxPage g_wx;   // S3: replaces the "PAGE A" placeholder
 static RecorderPage g_recorder;   // S6: replaces the "PAGE B" placeholder
 static ChronoPage g_chrono;       // S8: drop-tank chronograph
+static TcasPage g_tcas;           // S9: TCAS LoRa radar
 static SettingsPage g_settings;
 
 static bool abnormalReset()
@@ -159,6 +162,7 @@ static void deferredProbeTask(void*)
     AttitudeService::onImuReady(board().periph(Periph::Imu) == PeriphState::Ok);
     RecorderService::onImuReady(board().periph(Periph::Imu) == PeriphState::Ok);   // S6: hub is up now
     PowerService::enforceIdleRails();
+    TcasService::onProbeDone();   // S9: initLoRa() re-began the radio with defaults; TCAS may start only now
     raisePeriphCautions();
     EventBus::publish(EventType::PeriphStatusChanged);
     LOGI("boot", "deferred probe done in %lu ms", (unsigned long)(millis() - t0));
@@ -250,6 +254,8 @@ void setup()
     SvcTask::addTick(RecorderService::tick);
     ChronoService::begin();              // S8: after Time/Power/Alert/Audio; restores a running timer (late alerts)
     SvcTask::addTick(ChronoService::tick);
+    TcasService::begin();                // S9: after Power/Alerts/Settings; the radio starts after the deferred probe
+    SvcTask::addTick(TcasService::tick);
     SvcTask::addTick(AttitudeService::tick);
     WeatherService::begin();             // S3: before NetService (TLS allocator before Wi-Fi is first used)
     SvcTask::addTick(WeatherService::tick);
@@ -262,6 +268,7 @@ void setup()
     PageManager::registerPage(&g_wx);
     PageManager::registerPage(&g_recorder);
     PageManager::registerPage(&g_chrono);
+    PageManager::registerPage(&g_tcas);
     PageManager::registerPage(&g_settings);
     PageManager::onFirstHome(onFirstHome);
 
@@ -336,7 +343,7 @@ void loop()
             break;
         case EventType::AlertRaised:
             if (e.b != 0) {   // S7: only new/re-armed, unacknowledged alerts may wake the screen (FR-004)
-                ScreenService::onAlert(core::AlertLevel(e.b));
+                ScreenService::onAlert(core::AlertLevel(e.b & 0xFF), (e.b & 0x100u) != 0);   // S9: bit 8 = speaks
             }
             AnnunciatorBar::update();
             break;
