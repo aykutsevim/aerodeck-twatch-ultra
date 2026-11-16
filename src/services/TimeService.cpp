@@ -36,9 +36,9 @@ static int16_t tzOffset()
     return s_tz.offsetMinutes(int64_t(time(nullptr)));
 }
 
-static void setSystemTime(int64_t utc)
+static void setSystemTime(int64_t utc, long usec = 0)
 {
-    timeval tv{time_t(utc), 0};
+    timeval tv{time_t(utc), usec};
     settimeofday(&tv, nullptr);
 }
 
@@ -61,9 +61,10 @@ void begin()
         int64_t utc = core::utcFromCivil(year, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
         s_valid = integrity && core::clockPlausible(year);
         if (s_valid) {
-            setSystemTime(utc);
+            // S8 (research R1): the RTC only has whole seconds; centre the error (±0.5 s instead of -1..0 s).
+            setSystemTime(utc, 500000);
         }
-        LOGI("time", "RTC %04d-%02d-%02dT%02d:%02d:%02dZ integrity=%d -> %s", year, t.tm_mon + 1, t.tm_mday,
+        LOGI("time", "RTC %04d-%02d-%02dT%02d:%02d:%02dZ integrity=%d -> %s (+0.5 s)", year, t.tm_mon + 1, t.tm_mday,
              t.tm_hour, t.tm_min, t.tm_sec, integrity ? 1 : 0, s_valid ? "valid" : "NOT SET");
     } else {
         LOGW("time", "RTC unavailable");

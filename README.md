@@ -107,7 +107,14 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
   reading angle). Change it in Settings → Horizon tilt (0° = level when lying flat … 90° = level when held
   upright).
 - **Battery:** measured currents and the battery-life estimate are in [docs/power_report.md](docs/power_report.md).
-- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → Settings → PFD.
+- **Drop-tank chronograph (S8):** the **CHRONO** page has a countdown with presets 5 / 15 / 25 / 50 min or a custom
+  1–120 min, START / PAUSE / RESET, a drop tank that drains and a big MM:SS readout.
+  - At zero the watch raises **BINGO FUEL** (vibration + voice).
+  - **POMODORO** alternates work (the chosen length) and breaks of 5 / 10 / 15 min: BINGO FUEL at the end of work,
+    **BREAK OVER** (chime) at the end of a break.
+  - The timer keeps running on other pages, with the screen off, through restarts and after Pull to Eject: the
+    watch wakes itself just before zero. Ejecting in the last 6 s is postponed.
+- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → CHRONO → Settings → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
   restore defaults, and firmware/peripheral status.
@@ -149,6 +156,8 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad nvg on\|off` | NVG night mode (persisted) |
 | `ad eject` · `ad wake` · `ad boot` | Eject now (same as the gesture) · cause of the last wake and the eject timing · boot-to-watch-face time |
 | `ad pwr log on\|off` | 1 Hz power profile: battery %, mV, charging, drain rate, screen, NVG, supplies |
+| `ad chrono` · `ad chrono start [s]\|pause\|resume\|reset` · `ad chrono pomo <workS> <breakS>` | Timer state (incl. the last expiry error) · controls; seconds are test hooks |
+| `ad probe s8 alarm <s>` | Test hook: deep sleep with only the RTC-alarm wake |
 | `ad probe s7 sleep\|nvg\|day\|wake\|i2c` | Test hooks: raw deep sleep, NVG filter on/off, wake cause, I2C bus scan |
 | `ad wifi age <s>` | Test hook: pretend the last sync was N s ago (TIME UNSYNC) |
 | `ad att` | Attitude: status, pitch, roll, LOCK, sample rate, latency, raw gravity |
@@ -163,7 +172,8 @@ Full contracts: [S0](specs/001-platform-foundation/contracts/serial_commands.md)
 [S4 additions](specs/005-alert-haptics/contracts/serial_commands.md) ·
 [S5 additions](specs/006-gpws-audio/contracts/serial_commands.md) ·
 [S6 additions](specs/007-flight-recorder/contracts/serial_commands.md) ·
-[S7 additions](specs/008-nvg-eject-power/contracts/serial_commands.md).
+[S7 additions](specs/008-nvg-eject-power/contracts/serial_commands.md) ·
+[S8 additions](specs/009-drop-tank-chrono/contracts/serial_commands.md).
 
 ## Project layout
 

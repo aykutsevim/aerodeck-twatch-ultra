@@ -16,6 +16,8 @@ constexpr AlertDef kTable[] = {
     {AlertId::TimeUnsync, AlertLevel::Advisory, Pattern::Advisory, 0, 0, "TIME UNSYNC", "timeunsync"},
     {AlertId::Stall, AlertLevel::Warning, Pattern::StickShaker, 2000, uint8_t(Clip::Stall), "STALL", "stall"},
     {AlertId::PullUp, AlertLevel::Warning, Pattern::StickShaker, 2000, uint8_t(Clip::PullUp), "PULL UP", "pullup"},
+    {AlertId::BingoFuel, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::BingoFuel), "BINGO FUEL", "bingofuel"},
+    {AlertId::BreakOver, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Chime), "BREAK OVER", "breakover"},
     {AlertId::Test1, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 1", "test1"},
     {AlertId::Test2, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 2", "test2"},
     {AlertId::Test3, AlertLevel::Caution, Pattern::Caution, 0, uint8_t(Clip::Minimums), "TEST 3", "test3"},

@@ -287,6 +287,10 @@ static void eject(uint8_t source, uint32_t gestureMs)
         }
         const uint32_t w = s_sleepHooks[i]();
         hooks++;
+        if (w == kPostponeSleep) {
+            LOGW("pwr", "eject postponed: timer expiring");
+            return;   // before the quiesce: the UI keeps running (S8, I1)
+        }
         if (w > 0 && (wakeIn == 0 || w < wakeIn)) {
             wakeIn = w;
         }

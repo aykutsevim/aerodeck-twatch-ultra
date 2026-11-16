@@ -261,7 +261,7 @@ static void test_schema_v7_stride()
 // S7 schema v8: NVG, screen timeout index, raise-to-wake (additive; Wi-Fi and other keys kept on migration).
 static void test_schema_v8_display()
 {
-    TEST_ASSERT_EQUAL(8, kSchemaVersion);
+    TEST_ASSERT_TRUE(kSchemaVersion >= 8);
     TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(7, 8, true)));
     struct {
         SettingKey k;
@@ -293,6 +293,39 @@ static void test_schema_v8_display()
     TEST_ASSERT_EQUAL(1, settingDef(SettingKey::Raise).def);
     // Keys from earlier schemas keep their stored values (sanitize keeps a valid present value).
     TEST_ASSERT_EQUAL(120, sanitizeSetting(SettingKey::Stride, 120, true));
+}
+
+// S8 schema v9: chronograph lengths and mode (additive).
+static void test_schema_v9_chrono()
+{
+    TEST_ASSERT_EQUAL(9, kSchemaVersion);
+    TEST_ASSERT_EQUAL(int(SchemaAction::Migrate), int(schemaAction(8, 9, true)));
+    struct {
+        SettingKey k;
+        const char* name;
+        SettingType t;
+        int32_t def, min, max, step;
+    } rows[] = {
+        {SettingKey::ChrLen, "chrlen", SettingType::U8, 25, 1, 120, 0},
+        {SettingKey::ChrMode, "chrmode", SettingType::Bool, 0, 0, 1, 0},
+        {SettingKey::ChrWork, "chrwork", SettingType::U8, 25, 1, 120, 0},
+        {SettingKey::ChrBrk, "chrbrk", SettingType::U8, 5, 5, 15, 5},
+    };
+    for (auto& r : rows) {
+        const SettingDef& d = settingDef(r.k);
+        TEST_ASSERT_EQUAL_STRING(r.name, d.key);
+        TEST_ASSERT_EQUAL(int(r.t), int(d.type));
+        TEST_ASSERT_EQUAL(r.def, d.def);
+        TEST_ASSERT_EQUAL(r.min, d.min);
+        TEST_ASSERT_EQUAL(r.max, d.max);
+        TEST_ASSERT_EQUAL(r.step, d.step);
+        TEST_ASSERT_TRUE(d.editable);
+        TEST_ASSERT_EQUAL(int(r.k), findSettingKey(r.name));
+        TEST_ASSERT_EQUAL(r.def, sanitizeSetting(r.k, 0, false));   // migration v8→v9: missing → default
+        TEST_ASSERT_FALSE(validateSetting(r.k, r.max + 1));
+    }
+    TEST_ASSERT_TRUE(validateSetting(SettingKey::ChrBrk, 10));
+    TEST_ASSERT_FALSE(validateSetting(SettingKey::ChrBrk, 7));
 }
 
 static void test_s0_settings_have_no_step()
@@ -329,6 +362,7 @@ int main()
     RUN_TEST(test_schema_v6_audio);
     RUN_TEST(test_schema_v7_stride);
     RUN_TEST(test_schema_v8_display);
+    RUN_TEST(test_schema_v9_chrono);
     RUN_TEST(test_s0_settings_have_no_step);
     RUN_TEST(test_only_psk_is_secret);
     return UNITY_END();

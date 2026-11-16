@@ -34,6 +34,11 @@ static const SettingDef kDefs[] = {
     {"scrto", SettingType::U8, 1, 0, 5, 0, false, true},       // screen timeout index: 10/15/30/60/300 s/Never
     {"raise", SettingType::Bool, 1, 0, 1, 0, false, true},     // raise-to-wake
     {"attref", SettingType::U8, 30, 0, 90, 15, false, true},   // horizon level at this face tilt (deg, 0 flat)
+    // S8 (schema 9)
+    {"chrlen", SettingType::U8, 25, 1, 120, 0, false, true},   // countdown minutes (presets 5/15/25/50 or custom)
+    {"chrmode", SettingType::Bool, 0, 0, 1, 0, false, true},   // 0 countdown, 1 Pomodoro
+    {"chrwork", SettingType::U8, 25, 1, 120, 0, false, true},  // Pomodoro work minutes
+    {"chrbrk", SettingType::U8, 5, 5, 15, 5, false, true},     // Pomodoro break minutes (5/10/15)
 };
 static_assert(sizeof(kDefs) / sizeof(kDefs[0]) == size_t(SettingKey::Count), "registry/enum mismatch");
 

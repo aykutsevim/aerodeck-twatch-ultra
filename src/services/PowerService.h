@@ -44,6 +44,9 @@ void registerCommands();   // `ad fuel`, `ad fuel sim`; S7: `ad eject`, `ad wake
 // S7 eject (FR-008/009, research R6). EjectRequested (UI gesture or console) → eject() on the svc task.
 // Pre-sleep hooks run in the eject sequence; each returns the wanted wake-up in seconds (0 = none). ≤ 4 hooks.
 using PreSleepHook = uint32_t (*)();
+// S8: a hook returning kPostponeSleep cancels this eject (e.g. a timer expires within seconds); nothing is undone
+// because the hooks run before the UI quiesce.
+constexpr uint32_t kPostponeSleep = 0xFFFFFFFFu;
 bool addPreSleepHook(PreSleepHook fn);
 // Quiesce handshake with the UI task: while ejecting() is true the UI stops LVGL, turns the display off and calls
 // uiQuiesced() once. If deep sleep turns out to be unsupported, ejecting() goes false again and the UI resumes.

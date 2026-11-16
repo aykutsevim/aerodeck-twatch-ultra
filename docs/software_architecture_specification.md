@@ -128,7 +128,10 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
       off);
    5. `board().deepSleep(Button [| Timer], s)`.
 3. The board's own sequence powers off the optional rails, keeps the display rail, the idle sensor hub and the RTC
-   backup charge, then arms ext1 on `PMU_INT` (+ the timer).
+   backup charge, then arms ext1 on `PMU_INT`.
+   - **S8:** a requested timer wake sets the **PCF85063 alarm** (crystal) and adds `RTC_INT` (GPIO1, RTC pull-up)
+     to ext1. The ESP RC timer is only the fallback without an RTC.
+   - A hook may return `kPostponeSleep`; the eject then returns before the quiesce.
 4. Wrist-motion wake is not used (OI-1 closed, spike behind `AERODECK_IMU_WAKE`).
 5. Measured: 103 ms from the end of the gesture to sleep; 3.4 s from wake to the watch face.
 
@@ -149,7 +152,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | `HapticService` | S4 | `core::HapticPolicy` (effect sequence per pattern × intensity × quiet; WARNING always full strength) + priority (a click never cuts a warning; never queued); plays via `IBoard::haptic(seq)`; `click()` safe from the UI task (~0.5 ms) | — |
 | `AudioService` | S5 | `audio` task (core 0, prio 5): `core::SoundQueue` (cap 6; Warning > Caution > Chime > Sample; dedupe; preempt; stale drop 5 s / chime 2 s), WAV from the FAT partition via `FFat` (platform service, ADR-013) parsed by `core::Wav`, q15 volume (`core::AudioMath`, Off + 4 steps), `RailLease(AudioAmp)` only while playing (30 ms settle, 20 ms zero guards, DMA flush + 150 ms tail → amp off ≈0.4 s after the last clip), output via `IBoard::audio*`; gates and hourly chime from `core::AudioPolicy` (quiet mode, volume Off, quiet hours; one chime per local hour); AlertManager queues callouts on raise/re-arm, every 3rd shaker cycle (~6 s) for an unacked WARNING, and stops them on acknowledge | — |
 | `RecorderService` | S6 | svc tick at 1 Hz: polls `IBoard::stepCount` (BHI260AP step counter) through `core::StepAccumulator` (hub restarts, implausible jumps) and `takePeakG` (corrected accelerometer, 50 Hz, ±16 g; peaks in the first 2 s after start-up discarded) into `core::DayLog` (today + 7 days, local-midnight rollover; no rollover while the clock is unset or when the date moves back; skipped days empty); motion configured in `onImuReady()` from the deferred probe; NM = steps × stride / 1852 (`core::FlightMath`); persisted in NVS `rec` (`core::RecBlob`, 100 B, CRC) every 10 min when changed, at rollover and on `esp_restart` (shutdown handler); `saveNow()` for S7; `ad rec …` | `RecorderSnapshot` |
-| `ChronoService` | S8 | Countdown model (`drop_tank_model`), Pomodoro, survives sleep via RTC RAM + wake timer | `ChronoSnapshot`, `ChronoExpired` |
+| `ChronoService` | S8 | Countdown + Pomodoro on absolute UTC end times (`core::ChronoModel`), NVS `chrono` (on changes only), BINGO FUEL / BREAK OVER alerts, eject pre-sleep hook (wake 5 s early, postpone in the last 6 s), `ad chrono` | `ChronoSnapshot` |
 | `RadioService` | S9 | SX1262 config per region, RX IRQ, TX queue, duty-cycle budget (`duty_cycle`) | — |
 | `TcasService` | S9 | Beacon schedule, target table, ageing, RSSI→range | `TcasSnapshot`, `TargetNew` |
 | `MicService` | S10 | PDM capture, RMS dBFS, FFT gesture detection | `MicSnapshot` |
@@ -163,6 +166,7 @@ The attitude task runs on core 1 at a higher priority than `ui`. This keeps samp
 | Store | Medium | Contents |
 | :--- | :--- | :--- |
 | `SettingsStore` | NVS namespace `aerodeck` | Schema version (v8 in S7: `nvg` default 0, `scrto` 0..5 index of 10 s/15 s/30 s/1 min/5 min/Never default 1, `raise` default 1, `attref` horizon tilt 0..90° step 15 default 30; v7 in S6: `stride` 30..150 cm default 75; v6 in S5: `volume` 0..4 default 3, `chime` default 1, `qhstart` 0..23 default 22, `qhend` 0..23 default 7; v5 in S4: `hapticlvl` 0..2 default 1, `quiet`; v4 in S3: `wxstn`, default LTAC; plus the internal `wxcache` blob), theme/NVG, `tzid` (named zone), `wifissid`, `wifipsk` (secret; NVS is **not encrypted**, so readable with physical flash access; documented limitation), `syncmin`, `lastsync`, METAR station, API key, LoRa region/callsign/SF/BW/power, volumes, haptic level, quiet hours, stride length, screen timeout |
+| Chronograph | Own NVS namespace `chrono`, blob `st` (38 B, versioned + CRC), written on state changes only; settings v9 `chrlen`/`chrmode`/`chrwork`/`chrbrk` (S8) | Timer state |
 | Recorder | Own NVS namespace `rec` (so Restore defaults keeps it), blob `day` (100 B, versioned + CRC): every 10 min when changed (stricter than the planned hourly), at each rollover, on `esp_restart` and at eject (S7; no `RTC_DATA_ATTR` mirror: NVS suffices, ADR-014) | Today's steps/maxG/time + 7-day ring |
 | Chrono | `RTC_DATA_ATTR` | Target end epoch, mode, state |
 | Assets | FAT partition `ffat` (mounted by LilyGoLib, ADR-009), flashed from `data/` with `pio run -t uploadfs` (ADR-013) `/audio/*.wav` (16-bit PCM, mono, 16 kHz; generated by `tools/gen_audio.py`) | master_caution, master_warning, stall, pull_up, bingo_fuel, minimums, traffic, chime |

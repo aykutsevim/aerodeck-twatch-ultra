@@ -1,5 +1,6 @@
 #include "services/BoardCommands.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include "board/IBoard.h"
 #include "core/SimFail.h"
@@ -80,8 +81,32 @@ static void cmdProbeS7(int, const char* const* argv, Reply& r)
     }
 }
 
+// S8 T003 probe (test hook): deep sleep with only the RTC-alarm wake, s seconds from now (turn the screen off
+// first with `ad screen off`).
+static void cmdProbeS8(int argc, const char* const* argv, Reply& r)
+{
+    if (argc < 2 || strcmp(argv[0], "alarm") != 0) {
+        r.err("expected alarm <seconds>");
+        return;
+    }
+    const long s = strtol(argv[1], nullptr, 10);
+    if (s < 1 || s > 7200) {
+        r.err("seconds 1..7200");
+        return;
+    }
+    r.ok();
+    r.line("sleeping");
+    LOGI("probe", "rtc alarm sleep %ld s at %lu ms", s, (unsigned long)millis());
+    Serial.flush();
+    delay(50);
+    if (!board().deepSleep(core::kWakeTimer, uint32_t(s))) {
+        LOGW("probe", "deepSleep unsupported");
+    }
+}
+
 void registerCommands()
 {
+    SerialConsole::add("probe s8", 2, cmdProbeS8);
     SerialConsole::add("probe s7", 1, cmdProbeS7);
     SerialConsole::add("periph", 0, cmdPeriph);
     SerialConsole::add("simfail", 1, cmdSimfail);

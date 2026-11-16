@@ -164,11 +164,11 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 3.7 Chronograph — "Drop Tank" timer (CHR)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| FR-CHR-001 | M | The user shall set a countdown (presets 5/15/25/50 min, plus custom) and start, pause, resume and reset it. |
+| FR-CHR-001 | M | The user shall set a countdown (presets 5/15/25/50 min, plus custom) and start, pause, resume and reset it. *(S8: custom 1–120 min in 1-min steps; choices locked while running.)* |
 | FR-CHR-002 | M | The remaining time shall be shown as an external drop tank fuel gauge that depletes as time runs down, plus an MM:SS readout. |
 | FR-CHR-003 | M | At zero, the system shall raise a "BINGO FUEL" CAUTION (haptic plus *Bingo Fuel* callout). |
-| FR-CHR-004 | M | A running timer shall keep counting and still fire its alert when the user changes pages or the device enters light/deep sleep (RTC/timer wake). |
-| FR-CHR-005 | S | A Pomodoro mode shall alternate work and break intervals automatically. |
+| FR-CHR-004 | M | A running timer shall keep counting and still fire its alert when the user changes pages or the device enters light/deep sleep (RTC/timer wake). *(S8: absolute UTC end time; after eject the PCF85063 RTC alarm wakes the watch 5 s before the event (boot lead time); an eject in the last 6 s is postponed; a restart keeps the timer; an expiry while off is raised late at boot. Measured: ±0.55 s after eject.)* |
+| FR-CHR-005 | S | A Pomodoro mode shall alternate work and break intervals automatically. *(S8: default 25 min work / 5 min break; break 5/10/15; BINGO FUEL at the end of work, BREAK OVER with the chime at the end of a break; no long break.)* |
 
 ### 3.8 Display modes & power UX (NVG / EJT)
 | ID | Pri | Requirement |
