@@ -12,6 +12,9 @@
 #include "pages/RecorderPage.h"
 #include "pages/SettingsPage.h"
 #include "pages/TcasPage.h"
+#include "pages/KaanPage.h"
+#include "assets/KaanArt.h"
+#include "core/NvgColor.h"
 #include "pages/WxPage.h"
 #include "services/AttitudeService.h"
 #include "services/AudioService.h"
@@ -53,6 +56,7 @@ static RecorderPage g_recorder;   // S6: replaces the "PAGE B" placeholder
 static ChronoPage g_chrono;       // S8: drop-tank chronograph
 static TcasPage g_tcas;           // S9: TCAS LoRa radar
 static SettingsPage g_settings;
+static KaanPage g_kaan;           // 011: KAAN art, last page (swipe right from the PFD)
 
 static bool abnormalReset()
 {
@@ -70,11 +74,16 @@ static bool abnormalReset()
 
 static void onStage(BootStage s) { BootGuard::mark(g_boot, s); }
 
-// S7: NVG forces 10 % (FR-013/016); otherwise the stored level (20..100 %).
+// S7: NVG forces 10 % (FR-013/016); otherwise the stored level (20..100 %). Also used for the boot splash (011).
+static uint8_t brightnessPctFor(bool nvg)
+{
+    return nvg ? 10 : uint8_t((SettingsStore::get(SettingKey::Bright) + 1) * 20);
+}
+
 static void applyBrightness()
 {
     const bool nvg = SettingsStore::getBool(SettingKey::Nvg);
-    const uint8_t pct = nvg ? 10 : uint8_t((SettingsStore::get(SettingKey::Bright) + 1) * 20);
+    const uint8_t pct = brightnessPctFor(nvg);
     board().setBrightnessPct(pct);
     ScreenService::setApplied(nvg, pct);
 }
@@ -205,9 +214,16 @@ void setup()
     PowerService::registerCommands();
     SerialConsole::add("nav", 1, cmdNav);
     SerialConsole::add("boot", 0, [](int, const char* const*, Reply& r) {   // S7 (FR-011): wake → PFD time
-        char line[64];
-        snprintf(line, sizeof line, "boot_to_home_ms=%lu wake=%s", (unsigned long)g_bootHomeMs,
-                 core::wakeCauseName(board().wakeCause()));
+        char line[128];
+        const SplashResult sp = board().splashResult();
+        int n = snprintf(line, sizeof line, "boot_to_home_ms=%lu wake=%s", (unsigned long)g_bootHomeMs,
+                         core::wakeCauseName(board().wakeCause()));
+        if (sp.shown) {   // feature 011: the visible window is boot_to_home_ms - splash_at_ms
+            snprintf(line + n, sizeof line - n, " splash=1 splash_at_ms=%lu splash_cost_ms=%lu",
+                     (unsigned long)sp.atMs, (unsigned long)sp.costMs);
+        } else {
+            snprintf(line + n, sizeof line - n, " splash=0 skip=%s", core::splashSkipName(sp.skip));
+        }
         r.ok();
         r.line(line);
     });
@@ -226,6 +242,14 @@ void setup()
 #endif
 
     board().onStage(onStage);
+    {   // Feature 011: the KAAN splash, pushed by the board right after the panel init (full starts only).
+        const bool nvg = SettingsStore::getBool(SettingKey::Nvg);
+        SplashSpec sp;
+        sp.art = &kKaanSplash;
+        sp.fg565 = nvg ? core::NvgColor::toGreen565(0xFFFF) : uint16_t(0xFFFF);
+        sp.brightnessPct = brightnessPctFor(nvg);
+        board().setSplash(sp);
+    }
     uint16_t simMask = uint16_t(SettingsStore::get(SettingKey::SimFail));
     BootResult br = board().begin(simMask, mode == BootMode::Safe, mode == BootMode::Headless);
 
@@ -240,6 +264,14 @@ void setup()
         return;
     }
 
+    {
+        const SplashResult sp = board().splashResult();
+        if (sp.shown) {
+            LOGI("boot", "splash shown at %lu ms (%lu ms)", (unsigned long)sp.atMs, (unsigned long)sp.costMs);
+        } else {
+            LOGI("boot", "splash skipped (%s)", core::splashSkipName(sp.skip));
+        }
+    }
     g_ui = true;
     BootGuard::mark(g_boot, BootStage::UiInit);
     Theme::begin(board().display());
@@ -270,6 +302,7 @@ void setup()
     PageManager::registerPage(&g_chrono);
     PageManager::registerPage(&g_tcas);
     PageManager::registerPage(&g_settings);
+    PageManager::registerPage(&g_kaan);
     PageManager::onFirstHome(onFirstHome);
 
     AnnunciatorBar::begin();   // S4: replaces the S0 caution banner

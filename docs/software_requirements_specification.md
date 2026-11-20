@@ -85,7 +85,7 @@ The concept spec was written for the **LilyGO T-Watch S3**. The development unit
 ### 3.1 Platform & navigation (PLT)
 | ID | Pri | Requirement |
 | :--- | :--- | :--- |
-| FR-PLT-001 | M | The system shall boot to the PFD watch face within 4 s of power-on or wake from deep sleep. *(Amended in S0 from 3 s; the measured hardware/vendor floor is ~3.45 s.)* |
+| FR-PLT-001 | M | The system shall boot to the PFD watch face within 4 s of power-on or wake from deep sleep. *(Amended in S0 from 3 s; the measured hardware/vendor floor is ~3.45 s.)* *(Feature 011: a KAAN splash is shown on full starts inside this limit, from the panel init to the first PFD frame, ≈ 1.07 s; measured boot ≈ 3.88 s. Deep-sleep wakes show no splash, ≈ 3.49 s.)* |
 | FR-PLT-002 | M | The system shall show MFD pages in a fixed ring. Swiping left/right shall move to the next/previous page, wrapping at the ends. |
 | FR-PLT-003 | M | A short press of the physical button shall return to the PFD from any page. A press on the PFD shall go to the most recently used MFD page. |
 | FR-PLT-004 | M | Each page shall get lifecycle events (enter, exit, suspend). A page shall release hardware it no longer needs on exit. |

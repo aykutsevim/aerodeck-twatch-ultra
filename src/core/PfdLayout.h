@@ -18,9 +18,11 @@ struct PfdLayout {
     Box eicas;     // bottom strip under the ADI
     Box maxg;      // top-left corner
     Box nm;        // top-right corner
+    Box emblem;    // feature 011: KAAN emblem between ZULU and LOCAL (portrait only; empty = none)
 
     // cornerR: radius of the screen's rounded corners (0 = square); every box is kept inside the visible area.
-    static PfdLayout compute(int32_t w, int32_t h, int32_t cornerR = 0);
+    // emblemAspect: width/height of the emblem art (0 = no emblem).
+    static PfdLayout compute(int32_t w, int32_t h, int32_t cornerR = 0, float emblemAspect = 0.0f);
 };
 
 // True if the whole box lies inside a w×h screen whose corners are rounded with radius r.

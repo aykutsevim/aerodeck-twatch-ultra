@@ -55,7 +55,7 @@ static int32_t capAdi(int32_t a, float s)
 
 // Portrait (T-Watch Ultra: 410×502). Top to bottom: heading tape (with MAX G / NM beside it),
 // hour tape | ADI | minute tape, EICAS strip, ZULU | LOCAL row. Clears the top caution banner.
-static PfdLayout portrait(int32_t w, int32_t h, float s, int32_t cornerR)
+static PfdLayout portrait(int32_t w, int32_t h, float s, int32_t cornerR, float emblemAspect)
 {
     const int32_t m = sc(s, 4);
     const int32_t headH = sc(s, 24);
@@ -97,6 +97,19 @@ static PfdLayout portrait(int32_t w, int32_t h, float s, int32_t cornerR)
     const int32_t halfW = (contentW - m) / 2;
     L.zulu = {x0, rowY, halfW, timeH};
     L.local = {x0 + contentW - halfW, rowY, halfW, timeH};
+    // Feature 011: the emblem sits in the gap between the centred ZULU and LOCAL texts, from the time row down to
+    // the bottom margin (the bottom centre is not cut by the corner arcs); width by the art's aspect, capped.
+    if (emblemAspect > 0.0f) {
+        int32_t eh = h - m - rowY;
+        int32_t ew = int32_t(eh * emblemAspect + 0.5f);
+        if (ew > contentW / 4) {
+            ew = contentW / 4;
+            eh = int32_t(ew / emblemAspect + 0.5f);
+        }
+        if (ew > 0 && eh > 0) {
+            L.emblem = {(w - ew) / 2, rowY, ew, eh};
+        }
+    }
     return L;
 }
 
@@ -130,10 +143,10 @@ static PfdLayout landscape(int32_t w, int32_t h, float s)
     return L;
 }
 
-PfdLayout PfdLayout::compute(int32_t w, int32_t h, int32_t cornerR)
+PfdLayout PfdLayout::compute(int32_t w, int32_t h, int32_t cornerR, float emblemAspect)
 {
     const float s = float(w < h ? w : h) / 240.0f;
-    return h > w ? portrait(w, h, s, cornerR) : landscape(w, h, s);
+    return h > w ? portrait(w, h, s, cornerR, emblemAspect) : landscape(w, h, s);
 }
 
 } // namespace core

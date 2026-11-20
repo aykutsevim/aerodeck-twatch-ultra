@@ -4,7 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
+#include "core/AlphaArt.h"
 #include "core/BootGuard.h"
+#include "core/SplashCompose.h"
 #include "core/Types.h"
 
 struct GravitySample {
@@ -38,6 +40,19 @@ struct RadioPacket {
     bool crcError;
 };
 
+// Feature 011: boot splash pushed straight to the panel right after its init (contracts/board_splash.md).
+struct SplashSpec {
+    const AlphaArt* art = nullptr;   // nullptr = no splash
+    uint16_t fg565 = 0xFFFF;         // day white; NVG: core::NvgColor::toGreen565(0xFFFF)
+    uint8_t brightnessPct = 80;      // the value applyBrightness() will set later (no flicker)
+};
+struct SplashResult {
+    bool shown;
+    uint32_t atMs;     // millis() when it became visible
+    uint32_t costMs;   // compose + push time
+    core::SplashSkip skip;
+};
+
 class IBoard {
 public:
     using GravityCb = void (*)(const GravitySample& s, void* ctx);
@@ -46,6 +61,10 @@ public:
 
     // Called by begin() just before each boot stage (PmuProbe, VendorInit, DisplayInit) for BootGuard.
     virtual void onStage(StageCb cb) = 0;
+
+    // Feature 011: set before begin(). Boards without a splash keep the defaults (never shown).
+    virtual void setSplash(const SplashSpec&) {}
+    virtual SplashResult splashResult() const { return {false, 0, 0, core::SplashSkip::NoArt}; }
 
     // Never aborts on optional hardware. headless skips display/LVGL init entirely.
     virtual core::BootResult begin(uint16_t simFailMask, bool safeMode, bool headless) = 0;

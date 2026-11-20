@@ -50,6 +50,11 @@ FAT partition with `uploadfs` (ADR-013). This replaces the whole partition (the 
 Without the clips the watch works silently. To regenerate them (Windows, offline text-to-speech + a synthesized
 chime): `python tools/gen_audio.py`; see `data/audio/README.md`.
 
+**KAAN art (feature 011):** the start-up splash and the PFD emblem come from `art/kaan-splash-screen.jpg`. They are
+converted into `src/assets/KaanArt.{h,cpp}` (8-bit alpha masks, committed, so the build needs no tool). To
+regenerate them after changing the art (Windows): `python tools/gen_kaan_art.py` (`--emblem-aircraft-only` drops
+the lettering from the emblem).
+
 ### Host unit tests
 
 Pure logic in `src/core/` has Unity tests:
@@ -116,7 +121,12 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
     watch wakes itself just before zero. Ejecting in the last 6 s is postponed.
 - **TCAS LoRa radar (S9):** the **TCAS** page shows a sweeping radar with 4 range rings. Other AeroDeck watches appear as bogeys: a stronger signal is closer. Tap a bogey for its callsign, signal, age and battery. A contact entering the inner ring raises **TRAFFIC** (voice). TCAS is **off by default** (TCAS ON on the page or `ad tcas on`); the radio is powered only while it is on.
   - Radio: **EU868, 869.525 MHz, 10 dBm**, a beacon every 30 s, at most 1 % airtime per hour. This unit is the 915 MHz hardware variant: in Türkiye it must stay on EU868 (range is shorter, ADR-015). Do not select US915 where that band is not legal.
-- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → CHRONO → TCAS → Settings → PFD.
+- **KAAN splash (feature 011):** on every full start (power-on, reset, update) the KAAN silhouette fills the
+  screen for about a second, then the watch face appears (still within the 4 s boot time). Waking from eject goes
+  straight to the watch face. In NVG the splash is green and dim. A small KAAN emblem sits on the PFD, at the bottom
+  centre between ZULU and LOCAL.
+- **KAAN page (feature 011):** a swipe right on the watch face shows the large KAAN art (the last page of the ring).
+- **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → CHRONO → TCAS → Settings → KAAN → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
 - **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
   restore defaults, and firmware/peripheral status.
@@ -156,7 +166,7 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 | `ad fuel sim <pct\|off> [chg\|nochg]` | Test hook: simulate the battery level (and charging) |
 | `ad screen` · `ad screen on\|off\|raise` · `ad screen trace on\|off` | Screen state (timeout, raise, NVG, brightness, wake latency) · test hooks: force on/off, inject a raise, stream gravity at 20 Hz |
 | `ad nvg on\|off` | NVG night mode (persisted) |
-| `ad eject` · `ad wake` · `ad boot` | Eject now (same as the gesture) · cause of the last wake and the eject timing · boot-to-watch-face time |
+| `ad eject` · `ad wake` · `ad boot` | Eject now (same as the gesture) · cause of the last wake and the eject timing · boot-to-watch-face time and the splash (`splash=1 splash_at_ms=… splash_cost_ms=…` or `splash=0 skip=wake\|safe\|none\|nomem`) |
 | `ad pwr log on\|off` | 1 Hz power profile: battery %, mV, charging, drain rate, screen, NVG, supplies |
 | `ad chrono` · `ad chrono start [s]\|pause\|resume\|reset` · `ad chrono pomo <workS> <breakS>` | Timer state (incl. the last expiry error) · controls; seconds are test hooks |
 | `ad tcas` · `ad tcas on\|off` | TCAS state (radio, region, counters, duty use, contacts) · on/off (persisted) |
@@ -192,7 +202,9 @@ src/services/  settings, power, logging, events, serial console (core 0)
 src/ui/        page manager, theme, overlays (UI task only)
 src/pages/     pages
 test/          Unity tests for src/core/
-tools/         build scripts (LilyGoLib patch, firmware version), gen_audio.py (sound clips)
+tools/         build scripts (LilyGoLib patch, firmware version), gen_audio.py (sound clips), gen_kaan_art.py (KAAN art)
+art/           source artwork (kaan-splash-screen.jpg)
+src/assets/    generated art (KaanArt.*; do not edit)
 data/audio/    sound clips flashed with uploadfs (ADR-013)
 partitions/    project-owned partition table
 ```

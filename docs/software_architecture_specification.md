@@ -216,9 +216,24 @@ S9 sends the 18-byte form (no position, flags 0). Default radio profile: EU868 8
 - **TCAS page (S9):** page ring PFD → WX → RECORDER → CHRONO → **TCAS** → Settings. A custom-drawn PPI (4 rings,
   ownship, a sweep with a fading trail redrawn at 20 Hz by an `lv_timer` that exists only while the page is
   visible), bogeys as clickable objects (≥ 48 px hit area) placed from `TcasSnapshot` at 2 Hz, and a detail card.
+- **KAAN splash and emblem (feature 011, specs/011-kaan-splash-art):**
+  - **Splash:** on full starts only (not deep-sleep wakes or safe mode). `main` passes a `SplashSpec` (art,
+    colour, brightness; NVG-aware) to `IBoard::setSplash()` before `begin()`. BoardUltra composes the full frame
+    (`core::SplashCompose`, A8 → RGB565) on core 0 into PSRAM and hands it to LilyGoLib as the boot image. LilyGoLib
+    pushes it right after the panel init. **AERODECK-PATCH-3** replaces LilyGoLib's 5 s boot fade with a hook
+    that sets the user's brightness. The splash is visible ≈ 1.07 s until LVGL's first frame; boot ≈ 3.88 s.
+  - **SPI bus-lock guard:** a polling panel command must not follow a DMA push immediately. A 2 ms wait in the
+    hook and in `waitFlushIdle()` (brightness, screen off/on, deep sleep) prevents an ESP-IDF 4.4 panic in
+    `spi_bus_lock_bg_exit`.
+  - **Emblem:** a static A8 `lv_image` (recoloured with `Theme::fg()`, 80 % opacity, not clickable) in
+    `PfdLayout::emblem`, between the centred ZULU and LOCAL texts (portrait only). The art comes from
+    `tools/gen_kaan_art.py` → `src/assets/KaanArt.*`.
+  - **KAAN page:** `KaanPage` (`PageId::Kaan`) shows the splash art full size. It is registered last, so the ring
+    is PFD → WX → RECORDER → CHRONO → TCAS → Settings → **KAAN** → PFD; a swipe right on the PFD shows it. The
+    start page stays the PFD.
 
 ## 9. Build & configuration
-- Environments: `twatch_ultra` (primary), `twatchs3` (secondary, must compile), `native` (Unity tests of `src/core/` only: `build_src_filter = +<core/>`, `test_build_src = yes`; needs a host GCC, MinGW-w64 on Windows).
+- Environments: `twatch_ultra` (primary), `twatchs3` (secondary, must compile), `native` (Unity tests of `src/core/` only: `build_src_filter = +<core/> +<assets/>` (feature 011: generated art data), `test_build_src = yes`; needs a host GCC, MinGW-w64 on Windows).
 - **LilyGoLib patch (ADR-008):** `extra_scripts` runs `post:tools/patch_lilygolib.py`, which idempotently rewrites the IDF-4.4 display guard after `lib_deps` are installed and before compilation. A `pre:` script would run before the library exists on a clean checkout. A separate `pre:tools/fw_version.py` injects `AD_FW_VERSION` from `git describe`.
 - **Dependency pinning (constitution VII):** every `lib_deps` entry is an exact version, and Git URLs are pinned to a commit SHA.
 - `src_dir = src`. App sources under `src/{board,core,services,ui,pages,app}`.
