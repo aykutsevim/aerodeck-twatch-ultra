@@ -37,6 +37,8 @@ private:
     void updateRecorder(bool force);
     lv_obj_t* maxg_ = nullptr;
     lv_obj_t* nm_ = nullptr;
+    lv_obj_t* emblem_ = nullptr;          // feature 011: KAAN emblem (A8, recoloured)
+    lv_image_dsc_t emblemDsc_{};
     uint32_t lastRecSeq_ = 0;
     char maxgText_[24] = "";
     char nmText_[24] = "";

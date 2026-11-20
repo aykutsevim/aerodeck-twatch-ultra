@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "assets/KaanArt.h"
 #include "core/PfdLayout.h"
 
 using core::Box;
@@ -86,9 +87,50 @@ static void test_ultra_clears_caution_banner()
     TEST_ASSERT_TRUE(L.heading.y >= 48);   // S0 caution banner is S(28) ≈ 48 px tall at the top
 }
 
+// Feature 011: KAAN emblem between ZULU and LOCAL (data-model PfdLayout.emblem).
+static void test_ultra_emblem_box()
+{
+    const float aspect = float(kKaanEmblem.w) / kKaanEmblem.h;
+    PfdLayout L = PfdLayout::compute(410, 502, 64, aspect);
+    const Box& e = L.emblem;
+    TEST_ASSERT_TRUE(e.w > 0 && e.h > 0);
+    TEST_ASSERT_INT_WITHIN(1, 205, e.x + e.w / 2);                 // centred
+    TEST_ASSERT_EQUAL(L.zulu.y, e.y);                              // top = the ZULU/LOCAL row
+    const int m = 7;                                               // margin sc(4) at 410 px
+    TEST_ASSERT_TRUE(e.y + e.h <= 502 - m);
+    TEST_ASSERT_TRUE(core::insideRounded(e, 410, 502, 64));
+    const Box* others[] = {&L.eicas, &L.adi, &L.hour, &L.minute, &L.heading, &L.maxg, &L.nm};
+    for (const Box* b : others) {
+        TEST_ASSERT_FALSE_MESSAGE(overlap(e, *b), "emblem overlaps a PFD box");
+    }
+    // the ZULU/LOCAL text ("88:88", DSEG7 28 px ≈ 100 px) is centred in its box: keep clear of centre ± 55 px
+    const Box zt{L.zulu.x + L.zulu.w / 2 - 55, L.zulu.y, 110, L.zulu.h};
+    const Box lt{L.local.x + L.local.w / 2 - 55, L.local.y, 110, L.local.h};
+    TEST_ASSERT_FALSE(overlap(e, zt));
+    TEST_ASSERT_FALSE(overlap(e, lt));
+    const int contentW = L.minute.x + L.minute.w - L.hour.x;
+    TEST_ASSERT_TRUE(e.w <= contentW / 4);
+    // the generated emblem fits the box (±1 px)
+    TEST_ASSERT_INT_WITHIN(1, kKaanEmblem.w, e.w);
+    TEST_ASSERT_INT_WITHIN(1, kKaanEmblem.h, e.h);
+}
+
+static void test_emblem_absent_without_aspect_or_room()
+{
+    PfdLayout L = PfdLayout::compute(410, 502, 64);   // aspect 0: no emblem
+    TEST_ASSERT_EQUAL(0, L.emblem.w);
+    PfdLayout S = PfdLayout::compute(240, 240, 0, 0.67f);   // T-Watch S3: square layout, no gap
+    TEST_ASSERT_EQUAL(0, S.emblem.w);
+    TEST_ASSERT_EQUAL(0, S.emblem.h);
+    PfdLayout Ls = PfdLayout::compute(502, 410, 0, 0.67f);  // landscape: none
+    TEST_ASSERT_EQUAL(0, Ls.emblem.w);
+}
+
 int main()
 {
     UNITY_BEGIN();
+    RUN_TEST(test_ultra_emblem_box);
+    RUN_TEST(test_emblem_absent_without_aspect_or_room);
     RUN_TEST(test_ultra_portrait_410x502);
     RUN_TEST(test_landscape_502x410);
     RUN_TEST(test_s3_240x240);

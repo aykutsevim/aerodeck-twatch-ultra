@@ -72,9 +72,23 @@ public:
 
         stage(BootStage::VendorInit);   // note: LilyGoLib also brings up the panel in here
         instance.setDisplayParams(true, false);   // DMA partial refresh: measured fastest (validation.md, R7)
+        // Feature 011 (research R2, revised): the KAAN splash is handed to LilyGoLib as its boot image. begin()
+        // pushes it right after the panel init, before the 32 kHz crystal calibration and the touch/RTC/audio init;
+        // AERODECK-PATCH-3 replaces LilyGoLib's 5 s fade with aerodeck_boot_image_shown() (brightness, timestamp).
+        uint16_t* splashBuf = prepareSplash(safeMode);
         probe_ = instance.begin(flags);
         audioReady_ = !(flags & NO_HW_MIC);   // initAmplifier() ran (Player I2S installed)
         vendorOk_ = true;
+        if (splashBuf) {
+            while (!s_splashComposed) {   // not expected (the push comes ≈ 1.4 s after the start; composing ≈ 45 ms)
+                delay(1);
+            }
+            instance.setBootImage(nullptr);
+            heap_caps_free(splashBuf);
+            if (s_splashAtMs) {
+                splash_ = SplashResult{true, s_splashAtMs, splash_.costMs, SplashSkip::None};
+            }
+        }
 
         stage(BootStage::DisplayInit);
         beginLvglHelper(instance);
@@ -104,6 +118,10 @@ public:
     }
 
     void onStage(StageCb cb) override { stageCb_ = cb; }
+
+    // Feature 011 (contracts/board_splash.md).
+    void setSplash(const SplashSpec& s) override { splashSpec_ = s; }
+    SplashResult splashResult() const override { return splash_; }
 
     bool configureAttitude(float rateHz, GravityCb cb, void* ctx) override
     {
@@ -817,6 +835,10 @@ private:
         for (int i = 0; i < 100 && g_flushBusy; i++) {
             vTaskDelay(1);
         }
+        // Feature 011 (validation T014): pushColors() returns before the SPI ISR has finished exiting the
+        // background (DMA) transaction; a polling panel command issued in that window corrupts the ESP-IDF SPI bus
+        // lock and a later flush panics in spi_bus_lock_bg_exit (also the likely cause of the S9 one-off panic).
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
     static volatile bool g_nvgOn;
     static volatile bool g_flushBusy;
@@ -829,6 +851,65 @@ private:
             stageCb_(s);
         }
     }
+
+    // Feature 011: compose the KAAN splash (full screen, RGB565 in the panel's byte order) into PSRAM before
+    // instance.begin() and register it as LilyGoLib's boot image. Returns the buffer (freed after begin) or nullptr.
+    uint16_t* prepareSplash(bool safeMode)
+    {
+        SplashSkip why = SplashSkip::NoArt;
+        splash_ = SplashResult{false, 0, 0, SplashSkip::NoArt};
+        s_splashAtMs = 0;
+        if (!SplashCompose::shouldShow(safeMode ? BootMode::Safe : BootMode::Normal, wakeCause_,
+                                       splashSpec_.art != nullptr, why)) {
+            splash_.skip = why;
+            return nullptr;
+        }
+        auto* buf = static_cast<uint16_t*>(
+            heap_caps_malloc(size_t(kSplashW) * kSplashH * sizeof(uint16_t), MALLOC_CAP_SPIRAM));
+        if (!buf) {
+            splash_.skip = SplashSkip::NoMem;
+            return nullptr;
+        }
+        s_splashLevel = uint8_t((uint32_t(splashSpec_.brightnessPct) * DEVICE_MAX_BRIGHTNESS_LEVEL) / 100);
+        s_splashBuf = buf;
+        s_splashComposed = false;
+        // Compose on the idle core 0 while the main core runs LilyGoLib's PMU/panel init (≈ 1.4 s before the push).
+        // The task registers the boot image only when it is complete; if it were late, there is simply no splash.
+        if (xTaskCreatePinnedToCore(composeSplashTask, "splash", 3072, this, 5, nullptr, 0) != pdPASS) {
+            composeSplash(this);   // fallback: compose on this core
+        }
+        return buf;
+    }
+
+    // Portrait (rotation 0): the panel's DISP_WIDTH × DISP_HEIGHT (502 × 410) seen as 410 wide × 502 tall.
+    static constexpr uint16_t kSplashW = DISP_HEIGHT, kSplashH = DISP_WIDTH;
+
+    static void composeSplashTask(void* arg)
+    {
+        composeSplash(static_cast<BoardUltra*>(arg));
+        vTaskDelete(nullptr);
+    }
+
+    static void composeSplash(BoardUltra* self)
+    {
+        const uint32_t t0 = millis();
+        const AlphaArt& a = *self->splashSpec_.art;
+        for (uint16_t y = 0; y < kSplashH; y++) {
+            SplashCompose::row(a.a8, a.w, a.h, kSplashW, kSplashH, y, self->splashSpec_.fg565, true,
+                               s_splashBuf + size_t(y) * kSplashW);
+        }
+        self->splash_.costMs = millis() - t0;   // composition time (off the boot path)
+        instance.setBootImage(reinterpret_cast<uint8_t*>(s_splashBuf));
+        s_splashComposed = true;
+    }
+
+public:
+    static uint8_t s_splashLevel;
+    static volatile uint32_t s_splashAtMs;
+    static uint16_t* s_splashBuf;
+    static volatile bool s_splashComposed;
+
+private:
 
     static uint32_t noHwFlags(uint16_t mask)
     {
@@ -922,6 +1003,8 @@ private:
 
     static lv_indev_read_cb_t origTouchRead_;
     volatile uint32_t probe_ = 0;
+    SplashSpec splashSpec_{};   // feature 011
+    SplashResult splash_{false, 0, 0, SplashSkip::NoArt};
     volatile uint32_t pending_ = 0;
     volatile uint32_t absent_ = 0;    // present on the board but not inserted (e.g. no microSD card)   // bit per Periph still awaiting probeDeferred()
     uint16_t simMask_ = 0;
@@ -957,6 +1040,22 @@ volatile bool BoardUltra::g_flushBusy = false;
 QueueHandle_t BoardUltra::s_flushQ = nullptr;
 SemaphoreHandle_t BoardUltra::s_flushDone = nullptr;
 volatile bool BoardUltra::s_dio1 = false;
+uint8_t BoardUltra::s_splashLevel = 0;
+volatile uint32_t BoardUltra::s_splashAtMs = 0;
+uint16_t* BoardUltra::s_splashBuf = nullptr;
+volatile bool BoardUltra::s_splashComposed = false;
+
+// Feature 011 / AERODECK-PATCH-3: LilyGoLib calls this right after it pushed the boot image (the KAAN splash),
+// inside instance.begin(). Boot is single-threaded here, so the QSPI brightness command needs no lock.
+extern "C" void aerodeck_boot_image_shown()
+{
+    // A polling panel command issued right after the DMA push corrupted the ESP-IDF SPI bus lock (the SPI ISR was
+    // still exiting the background transaction): the next DMA flush panicked in spi_bus_lock_bg_exit (validation
+    // T014). Let the ISR finish first.
+    delay(2);
+    instance.setBrightness(BoardUltra::s_splashLevel);
+    BoardUltra::s_splashAtMs = millis();
+}
 SemaphoreHandle_t BoardUltra::s_radioSemIsr = nullptr;
 BoardUltra g_board;
 

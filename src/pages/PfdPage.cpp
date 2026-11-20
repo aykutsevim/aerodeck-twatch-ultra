@@ -1,5 +1,6 @@
 #include "pages/PfdPage.h"
 #include <sys/time.h>
+#include "assets/KaanArt.h"
 #include "core/ClockMath.h"
 #include "services/AttitudeService.h"
 #include "services/PowerService.h"
@@ -47,7 +48,8 @@ lv_obj_t* PfdPage::smallLabel(lv_obj_t* scr, const core::Box& b, const char* tex
 
 void PfdPage::onCreate(lv_obj_t* scr)
 {
-    layout_ = core::PfdLayout::compute(Theme::width(), Theme::height(), Theme::cornerRadius());
+    layout_ = core::PfdLayout::compute(Theme::width(), Theme::height(), Theme::cornerRadius(),
+                                       float(kKaanEmblem.w) / float(kKaanEmblem.h));
     const core::PfdLayout& L = layout_;
     heading_.create(scr, TapeWidget::Dir::Horizontal, L.heading.x, L.heading.y, L.heading.w, L.heading.h, 360,
                     nullptr);
@@ -60,6 +62,25 @@ void PfdPage::onCreate(lv_obj_t* scr)
     // Flight recorder slots (S6, FR-PFD-008): filled from RecorderSnapshot in frame().
     maxg_ = smallLabel(scr, L.maxg, "MAX G\n--", LV_ALIGN_TOP_LEFT);
     nm_ = smallLabel(scr, L.nm, "FLT NM\n--", LV_ALIGN_TOP_RIGHT);   // "FLIGHT NM" did not fit the box
+    // Feature 011: the KAAN emblem between ZULU and LOCAL (A8 mask tinted with the foreground colour; the NVG
+    // flush filter recolours it like everything else). Decorative: not clickable. Absent where the layout has no gap.
+    if (L.emblem.w > 0) {
+        emblemDsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+        emblemDsc_.header.cf = LV_COLOR_FORMAT_A8;
+        emblemDsc_.header.w = kKaanEmblem.w;
+        emblemDsc_.header.h = kKaanEmblem.h;
+        emblemDsc_.header.stride = kKaanEmblem.w;
+        emblemDsc_.data = kKaanEmblem.a8;
+        emblemDsc_.data_size = uint32_t(kKaanEmblem.w) * kKaanEmblem.h;
+        emblem_ = lv_image_create(scr);
+        lv_image_set_src(emblem_, &emblemDsc_);
+        lv_obj_set_pos(emblem_, L.emblem.x, L.emblem.y);
+        lv_obj_set_size(emblem_, L.emblem.w, L.emblem.h);
+        lv_obj_set_style_image_recolor(emblem_, Theme::fg(), 0);
+        lv_obj_set_style_image_recolor_opa(emblem_, LV_OPA_COVER, 0);
+        lv_obj_set_style_opa(emblem_, LV_OPA_80, 0);
+        lv_obj_remove_flag(emblem_, LV_OBJ_FLAG_CLICKABLE);
+    }
     lv_display_add_event_cb(lv_display_get_default(), renderReadyCb, LV_EVENT_RENDER_READY, this);
     // S7 (FR-006, research R8): the hazard handle fills the top band (the S0 banner zone above the PFD content);
     // created last so it draws over the instruments while being pulled.

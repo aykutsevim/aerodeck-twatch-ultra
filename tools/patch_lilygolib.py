@@ -109,5 +109,49 @@ def patch_sensorlib():
     log("SensorLib patched (%s)" % pioenv)
 
 
+# AERODECK-PATCH-3 (feature 011, KAAN boot splash): LilyGoUltra::begin() pushes the boot image right after the
+# panel init (before the ~0.6 s 32 kHz crystal calibration and the touch/RTC/audio init), then runs a synchronous
+# incrementalBrightness(250, 20) fade: 250 steps x 20 ms = 5 s of boot. Replace the fade with a hook that AeroDeck
+# implements (BoardUltra sets the user's brightness, 10 % in NVG); a weak empty default keeps other users working.
+MARKER3 = "AERODECK-PATCH-3"
+REL3 = os.path.join("LilyGoLib", "src", "LilyGoWatchUltra.cpp")
+BUG3 = (
+    "        this->pushColors(0, 0, w, h, (uint16_t *)_boot_images_addr);\n"
+    "        incrementalBrightness(250, 20);\n"
+)
+FIX3 = (
+    "        this->pushColors(0, 0, w, h, (uint16_t *)_boot_images_addr);\n"
+    "        // " + MARKER3 + ": no 5 s synchronous fade; the application sets the brightness\n"
+    "        aerodeck_boot_image_shown();\n"
+)
+ANCHOR3 = "uint32_t LilyGoUltra::begin(uint32_t disable_hw_init)\n"
+HOOK3 = (
+    "// " + MARKER3 + ": called right after the boot image is pushed (weak default: nothing)\n"
+    "extern \"C\" void __attribute__((weak)) aerodeck_boot_image_shown() {}\n\n"
+)
+
+
+def patch_boot_image():
+    libdeps = env.subst("$PROJECT_LIBDEPS_DIR")  # noqa: F821
+    pioenv = env.subst("$PIOENV")  # noqa: F821
+    path = os.path.join(libdeps, pioenv, REL3)
+    if not os.path.isfile(path):
+        log("LilyGoWatchUltra.cpp not in this env; skipping patch 3 (%s)" % pioenv)
+        return
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        text = f.read().replace("\r\n", "\n")
+    if MARKER3 in text:
+        log("boot image already patched (%s)" % pioenv)
+        return
+    if BUG3 not in text or text.count(ANCHOR3) != 1:
+        log("ERROR: boot image fade not found in %s. LilyGoLib changed? Update tools/patch_lilygolib.py" % path)
+        env.Exit(1)  # noqa: F821
+    text = text.replace(BUG3, FIX3, 1).replace(ANCHOR3, HOOK3 + ANCHOR3, 1)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    log("boot image patched (%s)" % pioenv)
+
+
 patch()
 patch_sensorlib()
+patch_boot_image()
