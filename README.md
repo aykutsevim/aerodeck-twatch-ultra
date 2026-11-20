@@ -16,14 +16,48 @@ Development follows [spec-kit](https://github.com/github/spec-kit) in feature sl
 | [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | Non-negotiable project principles |
 | [`specs/`](specs/) | Per-slice spec, plan, tasks and validation records |
 
-**Current state:** slice S1. The home page is the **Primary Flight Display**:
-- an artificial horizon driven by the BHI260AP's on-chip fusion, with LOCK when level;
-- hour and minute tapes, plus a heading tape that turns the seconds into compass degrees (1 s = 6°);
-- ZULU (UTC) and LOCAL time;
-- an EICAS strip: FUEL QTY (battery %), FUEL FLOW (drain %/h), EGT (power-chip °C) and a CHG annunciator;
-- a LOW FUEL caution.
+**Current state:** slices **S0–S9** are done (milestones M0–M3; M4 in progress), plus the KAAN splash, emblem and page (feature 011).
+Details and dates are in the [roadmap](docs/product_roadmap.md).
 
-It sits on the S0 platform: page ring, settings, cautions, diagnostics and boot-loop protection.
+| Page | What it does |
+| :--- | :--- |
+| **PFD** (watch face) | Artificial horizon from the BHI260AP fusion (LOCK when level); hour/minute tapes and a heading tape for the seconds; ZULU and LOCAL time; EICAS strip (FUEL QTY = battery %, FUEL FLOW = drain %/h, EGT = power-chip °C); MAX G and FLT NM; Pull-to-Eject handle; KAAN emblem |
+| **WX** | METAR for your station (default LTAC): wind compass, visibility, QNH, temperature, clouds, raw report, flight category |
+| **RECORDER** | Today's NM, steps and Max G, with a 7-day bar chart |
+| **CHRONO** | Drop-tank countdown / Pomodoro; BINGO FUEL alert, even after eject |
+| **TCAS** | LoRa radar (EU868): other AeroDeck watches as bogeys, TRAFFIC advisory |
+| **Settings** | Wi-Fi setup, time zone, weather station, alerts, sound, screen, NVG, recorder, diagnostics |
+| **KAAN** | The KAAN silhouette art (swipe right from the watch face) |
+
+Across all pages:
+- one master annunciator (WARNING / CAUTION / ADVISORY) with haptics and GPWS-style voice callouts;
+- NVG night mode;
+- screen timeout with raise-to-wake;
+- deep-sleep eject;
+- Wi-Fi time sync;
+- a KAAN splash on every full start.
+
+### On the wrist
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/watch-pfd.jpg" width="200" alt="PFD watch face"><br><sub><b>PFD</b>: horizon, tapes, EICAS, ZULU/LOCAL</sub></td>
+    <td align="center"><img src="docs/images/watch-wx.jpg" width="200" alt="WX page"><br><sub><b>WX</b>: decoded METAR (LTAC, MVFR)</sub></td>
+    <td align="center"><img src="docs/images/watch-recorder.jpg" width="200" alt="Recorder page"><br><sub><b>RECORDER</b>: NM, steps, Max G, 7 days</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/watch-chrono.jpg" width="200" alt="Chrono page running"><br><sub><b>CHRONO</b>: drop-tank countdown running</sub></td>
+    <td align="center"><img src="docs/images/watch-bingo-fuel.jpg" width="200" alt="BINGO FUEL alert"><br><sub><b>BINGO FUEL</b>: the tank is empty, the caution is raised</sub></td>
+    <td align="center"><img src="docs/images/watch-tcas.jpg" width="200" alt="TCAS radar page"><br><sub><b>TCAS</b>: LoRa radar sweep, EU868</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/watch-settings.jpg" width="200" alt="Settings page"><br><sub><b>Settings</b>: time zone, station, alerts</sub></td>
+    <td align="center"><img src="art/kaan-splash-screen.jpg" width="200" alt="KAAN art"><br><sub><b>KAAN</b>: splash and page art</sub></td>
+    <td></td>
+  </tr>
+</table>
+
+The photos are web-size copies in `docs/images/` of the originals in `art/` (1.jpg–7.jpg).
 
 ## Build & flash
 
@@ -74,7 +108,7 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
   off between syncs). Developers can also use `ad wifi set "<ssid>" "<password>"` over USB.
 - **Time zone:** Settings → Time zone (named zones with summer time; default Istanbul). ZULU always shows UTC.
 - **No network?** `ad time set 2026-11-11T09:24:00Z` (UTC) still works as a fallback.
-- **Weather (WX page):** swipe right from the watch face. It shows the latest METAR for your station (default LTAC):
+- **Weather (WX page):** swipe left from the watch face. It shows the latest METAR for your station (default LTAC):
   wind (with a compass), visibility, QNH, temperature/dewpoint, clouds, the raw report, and the flight category
   (VFR green, MVFR blue, IFR red, LIFR magenta). It updates with every time sync (same Wi-Fi session) and when you tap
   **REFRESH**. **STALE** means the report is more than 90 min old; NO WIFI / NET FAIL / NO REPORT / SRV ERROR say why
@@ -128,8 +162,9 @@ This needs a host C++ compiler on `PATH`. On Windows install MinGW-w64, e.g. MSY
 - **KAAN page (feature 011):** a swipe right on the watch face shows the large KAAN art (the last page of the ring).
 - **Swipe left/right** to move through the page ring: PFD → WX → RECORDER → CHRONO → TCAS → Settings → KAAN → PFD.
 - **Side button (short press):** return to Home. Press again on Home to go back to the last page.
-- **Settings page:** brightness, diagnostics overlay (FPS/heap), log level, local offset (30-min steps),
-  restore defaults, and firmware/peripheral status.
+- **Settings page:** Wi-Fi setup, time zone, weather station, alerts and sound, screen timeout, NVG, horizon tilt,
+  recorder stride, brightness, diagnostics overlay (FPS/heap), log level, restore defaults, and firmware/peripheral
+  status.
 - **Horizon flags:** ATT ALIGN for the first ~3 s after boot (motion sensor starting), ATT FAIL if motion sensing
   is unavailable (the clock and gauges keep working).
 - An **amber banner** names any peripheral that failed to start. The watch keeps working without it.
@@ -203,7 +238,8 @@ src/ui/        page manager, theme, overlays (UI task only)
 src/pages/     pages
 test/          Unity tests for src/core/
 tools/         build scripts (LilyGoLib patch, firmware version), gen_audio.py (sound clips), gen_kaan_art.py (KAAN art)
-art/           source artwork (kaan-splash-screen.jpg)
+art/           source artwork (kaan-splash-screen.jpg) and original watch photos (1.jpg–7.jpg)
+docs/images/   web-size watch photos used in this README
 src/assets/    generated art (KaanArt.*; do not edit)
 data/audio/    sound clips flashed with uploadfs (ADR-013)
 partitions/    project-owned partition table
